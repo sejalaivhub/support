@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: aiv_support_portal
     ports:
-      - "5173:5173"
+      - "8092:8092"
     env_file:
       - .env
     environment:

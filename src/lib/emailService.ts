@@ -175,7 +175,7 @@ export async function sendTicketAcknowledgement(
   const config = getSmtpConfig();
   const activeEmail = config.channelType === 'DEFAULT' ? config.defaultEmail : (config.customEmail || config.defaultEmail);
   const subject = `Ticket Received - ${ticket.subject}`;
-  const origin = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:5173');
+  const origin = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:8092');
   const ticketUrl = `${origin}/portal/tickets/${ticket.ticket_number}`;
 
   const body = `Hi ${recipient.name || 'Customer'}

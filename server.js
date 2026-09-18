@@ -12,7 +12,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8095;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -22,7 +22,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const { Pool } = pg;
 export const pool = new Pool({
   host: process.env.PG_HOST || 'localhost',
-  port: parseInt(process.env.PG_PORT || '5432', 10),
+  port: parseInt(process.env.PG_PORT || '8094', 10),
   database: process.env.PG_DATABASE || 'postgres',
   user: process.env.PG_USER || 'postgres',
   password: process.env.PG_PASSWORD || '',
@@ -32,7 +32,7 @@ export const pool = new Pool({
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ Could not connect to local PostgreSQL:');
-    console.error(`   Host: ${process.env.PG_HOST || 'localhost'}:${process.env.PG_PORT || '5432'}`);
+    console.error(`   Host: ${process.env.PG_HOST || 'localhost'}:${process.env.PG_PORT || '8094'}`);
     console.error(`   Database: ${process.env.PG_DATABASE || 'postgres'}`);
     console.error(`   User: ${process.env.PG_USER || 'postgres'}`);
     console.error(`   Error message: ${err.message}`);

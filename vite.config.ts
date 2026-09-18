@@ -210,11 +210,11 @@ export default defineConfig({
   plugins: [react(), smtpEmailPlugin()],
   server: {
     host: '0.0.0.0',
-    port: 5173,
+    port: 8092,
   },
   preview: {
     host: '0.0.0.0',
-    port: 5173,
+    port: 8092,
   },
   resolve: {
     alias: {
