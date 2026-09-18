@@ -167,7 +167,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session]);
 
   useEffect(() => {
-    const localDemoSession = localStorage.getItem('demo_session');
+    const isExplicitLogin = localStorage.getItem('explicit_login') === 'true';
+    if (!isExplicitLogin) {
+      localStorage.removeItem('demo_session');
+      localStorage.removeItem('demo_profile');
+    }
+
+    const localDemoSession = isExplicitLogin ? localStorage.getItem('demo_session') : null;
     if (localDemoSession) {
       try {
         const parsedSession = JSON.parse(localDemoSession);
@@ -181,6 +187,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         localStorage.removeItem('demo_session');
         localStorage.removeItem('demo_profile');
+        localStorage.removeItem('explicit_login');
       }
     }
 
@@ -188,32 +195,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session) {
         setSession(session);
       } else {
-        // Fallback default demo profile if opening direct URL in new tab without session
-        const defaultProf = DEMO_PROFILES['john.smith@acme.com'];
-        const defaultMockSession = {
-          access_token: 'demo-access-token',
-          token_type: 'bearer',
-          expires_in: 3600,
-          refresh_token: 'demo-refresh-token',
-          user: { id: defaultProf.id, email: defaultProf.email },
-        } as unknown as Session;
-        setSession(defaultMockSession);
-        setProfile(defaultProf);
-        localStorage.setItem('demo_session', JSON.stringify(defaultMockSession));
-        localStorage.setItem('demo_profile', JSON.stringify(defaultProf));
+        setSession(null);
+        setProfile(null);
       }
       setLoading(false);
     }).catch(() => {
-      const defaultProf = DEMO_PROFILES['john.smith@acme.com'];
-      const defaultMockSession = {
-        access_token: 'demo-access-token',
-        token_type: 'bearer',
-        expires_in: 3600,
-        refresh_token: 'demo-refresh-token',
-        user: { id: defaultProf.id, email: defaultProf.email },
-      } as unknown as Session;
-      setSession(defaultMockSession);
-      setProfile(defaultProf);
+      setSession(null);
+      setProfile(null);
       setLoading(false);
     });
 
@@ -286,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     } as unknown as Session;
 
+    localStorage.setItem('explicit_login', 'true');
     localStorage.setItem('demo_session', JSON.stringify(mockSession));
     localStorage.setItem('demo_profile', JSON.stringify(demoProf));
     setSession(mockSession);
@@ -305,7 +294,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         },
       });
-      if (!error && data) return { error: null };
+      if (!error && data) {
+        localStorage.setItem('explicit_login', 'true');
+        return { error: null };
+      }
     } catch (e) {
       // ignore
     }
@@ -343,6 +335,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     } as unknown as Session;
 
+    localStorage.setItem('explicit_login', 'true');
     localStorage.setItem('demo_session', JSON.stringify(mockSession));
     localStorage.setItem('demo_profile', JSON.stringify(demoProf));
     setSession(mockSession);
@@ -356,6 +349,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       // ignore
     }
+    localStorage.removeItem('explicit_login');
     localStorage.removeItem('demo_session');
     localStorage.removeItem('demo_profile');
     setSession(null);

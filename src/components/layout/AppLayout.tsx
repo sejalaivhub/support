@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Ticket, Plus, Settings, Users, Building2,
   LogOut, Menu, X, Bell, Shield, BarChart3, Calendar, ChevronRight
@@ -164,6 +164,13 @@ export function AppLayout({ children }: { children: ReactNode }) {
     e.stopPropagation();
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
+
+  const location = useLocation();
+  const isFreshdeskDashboard = location.pathname === '/admin' || location.pathname === '/agent';
+
+  if (isFreshdeskDashboard) {
+    return <div className="min-h-screen bg-[#f3f5f7]">{children}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
