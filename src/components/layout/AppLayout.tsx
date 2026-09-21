@@ -7,6 +7,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar } from '@/components/ui/Badges';
 import { fullName } from '@/lib/constants';
+import { FreshdeskLayout } from './FreshdeskLayout';
 
 interface NavItem {
   to: string;
@@ -165,11 +166,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  const location = useLocation();
-  const isFreshdeskDashboard = location.pathname === '/admin' || location.pathname === '/agent';
 
-  if (isFreshdeskDashboard) {
-    return <div className="min-h-screen bg-[#f3f5f7]">{children}</div>;
+
+  if (!isCustomer) {
+    return <FreshdeskLayout>{children}</FreshdeskLayout>;
   }
 
   return (
@@ -181,7 +181,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
       {/* Sidebar */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white flex flex-col transform transition-transform lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="flex items-center justify-between px-5 h-16 border-b border-slate-700/50">
+          <div className="flex items-center justify-between px-5 h-16 border-b border-slate-700/50">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center font-bold text-sm">A</div>
             <span className="font-semibold text-sm tracking-tight">AIV Support</span>

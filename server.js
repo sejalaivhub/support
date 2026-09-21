@@ -22,10 +22,10 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const { Pool } = pg;
 export const pool = new Pool({
   host: process.env.PG_HOST || 'localhost',
-  port: parseInt(process.env.PG_PORT || '8094', 10),
-  database: process.env.PG_DATABASE || 'postgres',
+  port: parseInt(process.env.PG_PORT || '5432', 10),
+  database: process.env.PG_DATABASE || 'aiv_support',
   user: process.env.PG_USER || 'postgres',
-  password: process.env.PG_PASSWORD || '',
+  password: process.env.PG_PASSWORD || 'root',
 });
 
 // Test DB connection
@@ -304,6 +304,19 @@ app.post('/rest/v1/:table', async (req, res) => {
       if (table === 'tickets' && !record.ticket_number) {
         const nextNum = Math.floor(100000 + Math.random() * 900000);
         record.ticket_number = `AIV-${nextNum}`;
+      }
+
+      // UUID format regex
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+      // Handle id column if not a valid UUID (gen_random_uuid)
+      if (record.id && !uuidRegex.test(record.id)) {
+        delete record.id;
+      }
+
+      // Handle account_id if invalid UUID (e.g. 'acc-1')
+      if (record.account_id && !uuidRegex.test(record.account_id)) {
+        record.account_id = '00000000-0000-0000-0000-000000001001';
       }
 
       const keys = Object.keys(record);
