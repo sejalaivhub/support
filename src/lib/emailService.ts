@@ -181,7 +181,7 @@ export async function sendTicketAcknowledgement(
   const body = `Hi ${recipient.name || 'Customer'}
 
 We would like to acknowledge that we have received your request and a ticket has been created.
-A support representative will be reviewing your request and will send you a personal response.(usually within 24 hours).
+A support representative will be reviewing your request and will send you a personal response.
 
 To view the status of the ticket or add comments, please visit
 ${ticketUrl}
@@ -189,14 +189,14 @@ ${ticketUrl}
 Thank you for your patience.
 
 Regards,
-aivhub Support Team`.trim();
+AIVHUB India Pvt.Ltd Support Team`.trim();
 
   const htmlBody = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background-color: #f4f7f8; padding: 40px 20px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 4px; border: 1px solid #eaebec;">
         <p style="font-size: 15px; font-weight: 600; color: #12344d; margin-top: 0; margin-bottom: 20px;">Hi ${recipient.name || 'Customer'}</p>
         <p style="font-size: 14px; color: #475867; line-height: 1.5; margin-bottom: 20px;">We would like to acknowledge that we have received your request and a ticket has been created.<br>
-        A support representative will be reviewing your request and will send you a personal response.(usually within 24 hours).</p>
+        A support representative will be reviewing your request and will send you a personal response.</p>
         <p style="font-size: 14px; color: #475867; margin-bottom: 20px;">To view the status of the ticket or add comments, please visit<br>
         <a href="${ticketUrl}" style="color: #2c5cc5; text-decoration: underline;">${ticketUrl}</a></p>
         <p style="font-size: 14px; color: #475867; margin-bottom: 30px;">Thank you for your patience.</p>
@@ -208,7 +208,7 @@ aivhub Support Team`.trim();
         </p>
         <p style="font-size: 14px; color: #475867; margin-bottom: 0;">
           Regards,<br>
-          aivhub Support Team
+          AIVHUB India Pvt.Ltd Support Team
         </p>
       </div>
     </div>
@@ -421,3 +421,100 @@ AIVHUB Support Team`.trim();
 
   return dispatchEmail('ACCOUNT_ACTIVATION_INVITE', user.email, fullNameStr, subject, body, `INVITE-${user.id.slice(-6)}`, htmlBody);
 }
+
+// 9. New Agent Added Notification (Sent to Account Administrator / Admin)
+export async function sendNewAgentAddedNotification(params: {
+  newAgentName: string;
+  newAgentEmail: string;
+  agentType?: string; // 'Full time' | 'Occasional'
+  roleName?: string;  // e.g. 'Agent'
+  addedByName?: string; // e.g. 'Sejal prasad'
+  fullTimeCount?: number;
+  occasionalCount?: number;
+  adminEmail?: string;
+  adminName?: string;
+}) {
+  const config = getSmtpConfig();
+  const activeEmail = config.channelType === 'DEFAULT' ? config.defaultEmail : (config.customEmail || config.defaultEmail);
+  const targetAdminEmail = params.adminEmail || activeEmail;
+  const targetAdminName = params.adminName || 'Admin';
+
+  const subject = `AIVHUB India Pvt.Ltd: A new agent was added to your account`;
+  const origin = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost:8092');
+  const manageAgentsUrl = `${origin}/admin/agents`;
+
+  // Format current date: e.g. "September 22, 3:47 PM IST"
+  const now = new Date();
+  const dateFormatted = now.toLocaleString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
+  }) + ' IST';
+
+  const agentTypeStr = params.agentType || 'Full time';
+  const roleStr = params.roleName || 'Agent';
+  const addedByStr = params.addedByName || 'Sejal prasad';
+  const fullTime = params.fullTimeCount !== undefined ? params.fullTimeCount : 4;
+  const occasional = params.occasionalCount !== undefined ? params.occasionalCount : 0;
+
+  const body = `Hi ${targetAdminName}
+
+A new ${agentTypeStr} agent, ${params.newAgentName} was added by ${addedByStr} in your account on ${dateFormatted} and has the role ${roleStr}.
+
+You currently have ${fullTime} full time agents and ${occasional} occasional agents in your Freshdesk account.
+
+If this change was made without your authorization, send us a reply.
+
+Manage agents:
+${manageAgentsUrl}
+
+Regards,
+Freshdesk Customer Support
+
+You can configure this notification settings by going to Admin -> Security in your account.`.trim();
+
+  const htmlBody = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol'; background-color: #f4f7f8; padding: 40px 20px;">
+      <div style="max-width: 650px; margin: 0 auto; background-color: #ffffff; padding: 36px; border-radius: 4px; border: 1px solid #eaebec; color: #12344d;">
+        <p style="font-size: 15px; font-weight: 700; color: #12344d; margin-top: 0; margin-bottom: 24px;">Hi ${targetAdminName}</p>
+        
+        <p style="font-size: 14px; color: #475867; line-height: 1.6; margin-bottom: 20px;">
+          A new ${agentTypeStr} agent, <strong style="color: #12344d;">${params.newAgentName}</strong> was added by <span style="color: #12344d;">${addedByStr}</span> in your account on ${dateFormatted} and has the role <strong style="color: #12344d;">${roleStr}</strong>.
+        </p>
+        
+        <p style="font-size: 14px; color: #475867; line-height: 1.6; margin-bottom: 24px;">
+          You currently have ${fullTime} full time agents and ${occasional} occasional agents in your Freshdesk account.
+        </p>
+        
+        <p style="font-size: 14px; color: #475867; line-height: 1.6; margin-bottom: 30px;">
+          If this change was made without your authorization, send us a reply.
+        </p>
+
+        <p style="margin-bottom: 28px;">
+          <a href="${manageAgentsUrl}" style="background-color: #000000; color: #ffffff; padding: 10px 22px; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 14px; display: inline-block;">Manage agents</a>
+        </p>
+
+        <p style="font-size: 12px; color: #64748b; font-style: italic; line-height: 1.5; margin-bottom: 28px;">
+          If the button doesn't work, copy-paste this URL in your browser's address bar: <a href="${manageAgentsUrl}" style="color: #2c5cc5; text-decoration: underline;">${manageAgentsUrl}</a>
+        </p>
+
+        <p style="font-size: 14px; color: #475867; line-height: 1.5; margin-bottom: 24px;">
+          Regards,<br>
+          Freshdesk Customer Support
+        </p>
+
+        <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 20px;">
+          <p style="font-size: 11px; color: #64748b; margin: 0;">
+            You can configure this notification settings by going to <a href="${manageAgentsUrl}" style="color: #2c5cc5; text-decoration: underline;">Admin -&gt; Security</a> in your account.
+          </p>
+        </div>
+      </div>
+    </div>
+  `.trim();
+
+  return dispatchEmail('AGENT_ADDED_NOTIFICATION', targetAdminEmail, targetAdminName, subject, body, `AGENT-${Date.now().toString().slice(-6)}`, htmlBody);
+}
+

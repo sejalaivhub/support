@@ -15,11 +15,11 @@ type LayoutMode = 'card' | 'inbox' | 'table';
 
 type SortOption = 'created_at' | 'priority' | 'updated_at' | 'sla_due';
 
-const PRIORITY_CONFIG: Record<TicketPriority, { label: string; color: string; bgColor: string; dotColor: string }> = {
-  P4: { label: 'Low', color: 'text-emerald-700', bgColor: 'bg-emerald-50 border-emerald-200 text-emerald-700', dotColor: 'bg-emerald-500' },
-  P3: { label: 'Medium', color: 'text-blue-700', bgColor: 'bg-blue-50 border-blue-200 text-blue-700', dotColor: 'bg-blue-500' },
-  P2: { label: 'High', color: 'text-amber-700', bgColor: 'bg-amber-50 border-amber-200 text-amber-700', dotColor: 'bg-amber-500' },
-  P1: { label: 'Urgent', color: 'text-red-700', bgColor: 'bg-red-50 border-red-200 text-red-700', dotColor: 'bg-red-500' },
+const PRIORITY_CONFIG: Record<TicketPriority, { label: string; dotColor: string; textColor: string }> = {
+  P4: { label: 'Low', dotColor: 'bg-[#22c55e]', textColor: 'text-gray-700' },
+  P3: { label: 'Medium', dotColor: 'bg-[#3b82f6]', textColor: 'text-gray-700' },
+  P2: { label: 'High', dotColor: 'bg-[#f59e0b]', textColor: 'text-gray-700' },
+  P1: { label: 'Urgent', dotColor: 'bg-[#ef4444]', textColor: 'text-gray-700' },
 };
 
 const DEMO_AGENTS: Profile[] = [
@@ -36,10 +36,11 @@ const DEMO_TEAMS: SupportTeam[] = [
 ];
 
 const DEMO_TYPES: TicketType[] = [
-  { id: 'type-1', name: 'Incident', is_active: true, sort_order: 1 },
-  { id: 'type-2', name: 'Service Request', is_active: true, sort_order: 2 },
-  { id: 'type-3', name: 'Question', is_active: true, sort_order: 3 },
-  { id: 'type-4', name: 'Change Request', is_active: true, sort_order: 4 },
+  { id: 'type-question', name: 'Question', is_active: true, sort_order: 1 },
+  { id: 'type-incident', name: 'Incident', is_active: true, sort_order: 2 },
+  { id: 'type-problem', name: 'Problem', is_active: true, sort_order: 3 },
+  { id: 'type-feature-request', name: 'Feature Request', is_active: true, sort_order: 4 },
+  { id: 'type-refund', name: 'Refund', is_active: true, sort_order: 5 },
 ];
 
 const INITIAL_DEMO_TICKETS: TicketWithRelations[] = [
@@ -226,6 +227,7 @@ export function FreshdeskTicketInbox() {
   // Layout & Toolbar State
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('card');
   const [showLayoutDropdown, setShowLayoutDropdown] = useState(false);
+  const [showTypeFilterDropdown, setShowTypeFilterDropdown] = useState(false);
   const [activeInboxTicketId, setActiveInboxTicketId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -660,65 +662,9 @@ export function FreshdeskTicketInbox() {
   }, [tickets, starredIds]);
 
   return (
-    <div className="space-y-4">
-      {/* 1. TOP HEADER BAR */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        {/* Title & Saved Star Badge */}
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight">All tickets</h1>
-
-          {/* Starred / Saved Button */}
-          <button
-            onClick={() => setStarredOnly(!starredOnly)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-              starredOnly
-                ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
-                : 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100'
-            }`}
-            title="Toggle saved tickets"
-          >
-            <Star className={`w-3.5 h-3.5 ${starredOnly ? 'fill-white' : 'fill-amber-400 text-amber-500'}`} />
-            <span>{activeStarredCount} saved</span>
-          </button>
-        </div>
-
-        {/* Live Search & Action Buttons */}
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          {/* Dynamic Search Box */}
-          <div className="relative flex-1 sm:w-64">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search subject, requester, ticket #..."
-              className="w-full pl-9 pr-8 py-1.5 text-xs rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-gray-50/50"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Refresh button */}
-          <button onClick={loadData} className="p-2 border border-gray-200 rounded-lg text-gray-500 hover:bg-gray-50 transition-colors" title="Refresh list">
-            <RefreshCw className="w-4 h-4" />
-          </button>
-
-          {/* Create New Ticket Button */}
-          <button
-            onClick={() => navigate('/agent/tickets/new')}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all active:scale-95 flex-shrink-0"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>New Ticket</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 2. TOOLBAR ROW */}
-      <div className="bg-white border border-gray-200 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-700 shadow-2xs">
+    <div className="p-4 space-y-3 bg-[#f8fafc] min-h-screen">
+      {/* TOOLBAR ROW MATCHING IMAGE 2 */}
+      <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-700 shadow-2xs">
         {/* Left Toolbar Controls */}
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 cursor-pointer select-none font-medium text-gray-700">
@@ -727,12 +673,11 @@ export function FreshdeskTicketInbox() {
               className="text-gray-400 hover:text-blue-600 focus:outline-none"
             >
               {isAllPageSelected ? (
-                <CheckSquare className="w-4.5 h-4.5 text-blue-600" />
+                <CheckSquare className="w-4 h-4 text-blue-600" />
               ) : (
-                <Square className="w-4.5 h-4.5" />
+                <Square className="w-4 h-4" />
               )}
             </button>
-            <span>Select All</span>
           </label>
 
           <div className="flex items-center gap-1.5">
@@ -740,13 +685,14 @@ export function FreshdeskTicketInbox() {
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as SortOption)}
-              className="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-md px-2.5 py-1 font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+              className="bg-transparent border-none text-gray-800 text-xs font-semibold focus:outline-none cursor-pointer pr-1"
             >
               <option value="created_at">Date created</option>
               <option value="priority">Priority</option>
               <option value="updated_at">Last updated</option>
               <option value="sla_due">SLA due</option>
             </select>
+            <ChevronDown className="w-3 h-3 text-gray-500 -ml-1 pointer-events-none" />
           </div>
         </div>
 
@@ -754,14 +700,14 @@ export function FreshdeskTicketInbox() {
         <div className="flex items-center gap-3">
           {/* Freshdesk Layout Dropdown Menu */}
           <div className="relative">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <span className="text-gray-500 font-medium">Layout:</span>
               <button
                 onClick={() => setShowLayoutDropdown(!showLayoutDropdown)}
-                className="flex items-center gap-2 px-3 py-1 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg font-semibold text-gray-800 shadow-2xs transition-colors"
+                className="flex items-center gap-1 text-gray-800 font-semibold hover:text-blue-600 transition-colors"
               >
                 <span className="capitalize">{layoutMode}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                <ChevronDown className="w-3 h-3 text-gray-500" />
               </button>
             </div>
 
@@ -797,11 +743,10 @@ export function FreshdeskTicketInbox() {
             )}
           </div>
 
-
           {/* Export Button */}
           <button
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg font-semibold text-gray-700 shadow-2xs transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-gray-700 hover:text-gray-900 font-semibold text-xs transition-colors"
           >
             <Download className="w-3.5 h-3.5 text-gray-500" />
             <span>Export</span>
@@ -809,34 +754,34 @@ export function FreshdeskTicketInbox() {
 
           {/* Pagination Indicator */}
           <div className="flex items-center gap-1.5 text-gray-600 border-l border-gray-200 pl-3">
-            <span className="font-medium">
+            <span className="font-medium text-xs">
               {filteredTickets.length === 0
-                ? '0–0 of 0'
-                : `${(currentPage - 1) * itemsPerPage + 1}–${Math.min(currentPage * itemsPerPage, filteredTickets.length)} of ${filteredTickets.length}`}
+                ? '0 - 0 of 0'
+                : `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(currentPage * itemsPerPage, filteredTickets.length)} of ${filteredTickets.length}`}
             </span>
             <button
               disabled={currentPage === 1}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
             <button
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="p-1 rounded-md hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {/* Filters Toggle Button */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-colors border ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold transition-colors border ${
               showFilters
-                ? 'bg-blue-50 border-blue-300 text-blue-700'
-                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
             }`}
           >
             <Filter className="w-3.5 h-3.5" />
@@ -983,58 +928,70 @@ export function FreshdeskTicketInbox() {
                   ? `${t.created_by_user.first_name[0] || ''}${t.created_by_user.last_name[0] || ''}`.toUpperCase()
                   : 'C';
 
+                const AVATAR_BG_COLORS = [
+                  'bg-[#e9d5ff] text-[#7e22ce]', // purple
+                  'bg-[#fef08a] text-[#854d0e]', // yellow
+                  'bg-[#fed7aa] text-[#c2410c]', // orange
+                  'bg-[#bbf7d0] text-[#15803d]', // green
+                  'bg-[#bfdbfe] text-[#1d4ed8]', // blue
+                ];
+                const avatarColorClass = AVATAR_BG_COLORS[Math.abs(t.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)) % AVATAR_BG_COLORS.length];
+
                 return (
                   <div
                     key={t.id}
                     onClick={() => navigate(`/agent/tickets/${t.id}`)}
-                    className={`bg-white border rounded-xl p-4 transition-all duration-150 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:shadow-md hover:border-gray-300 ${
-                      isSelected ? 'border-blue-500 bg-blue-50/20' : 'border-gray-200'
+                    className={`bg-white border border-gray-200 rounded-lg p-3.5 transition-all duration-150 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer hover:border-gray-300 hover:shadow-2xs ${
+                      isSelected ? 'bg-[#f0f7ff] border-blue-400' : ''
                     }`}
                   >
                     {/* Left Details */}
                     <div className="flex items-start gap-3 flex-1 min-w-0">
-                      {/* Checkbox & Star */}
-                      <div className="flex items-center gap-1.5 mt-1" onClick={(e) => e.stopPropagation()}>
+                      {/* Checkbox */}
+                      <div className="flex items-center gap-2 mt-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={(e) => handleToggleSelect(t.id, e)}
-                          className="text-gray-400 hover:text-blue-600 focus:outline-none"
+                          className="text-gray-300 hover:text-blue-600 focus:outline-none"
                         >
-                          {isSelected ? <CheckSquare className="w-4.5 h-4.5 text-blue-600" /> : <Square className="w-4.5 h-4.5" />}
-                        </button>
-                        <button
-                          onClick={(e) => toggleStar(t.id, e)}
-                          className="text-gray-300 hover:text-amber-400 focus:outline-none"
-                          title="Star ticket"
-                        >
-                          <Star className={`w-4 h-4 ${isStarred ? 'fill-amber-400 text-amber-400' : ''}`} />
+                          {isSelected ? <CheckSquare className="w-4 h-4 text-blue-600" /> : <Square className="w-4 h-4" />}
                         </button>
                       </div>
 
-                      {/* Requester Avatar */}
-                      <div className="w-9 h-9 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                      {/* Requester Avatar with Freshdesk Pastel Circle */}
+                      <div className={`w-8 h-8 rounded-full ${avatarColorClass} text-xs font-bold flex items-center justify-center shrink-0 mt-0.5`}>
                         {requesterInitials}
                       </div>
 
                       {/* Info & Metadata */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
                           {isNew && (
-                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-700 text-[10px] font-bold tracking-wide uppercase">
+                            <span className="px-1.5 py-0.5 rounded bg-[#e6f9f0] text-[#107044] text-[10px] font-semibold">
                               New
                             </span>
                           )}
-                          <h2 className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors truncate">
+                          {t.first_response_breached && (
+                            <span className="px-1.5 py-0.5 rounded bg-[#fef2f2] text-[#dc2626] text-[10px] font-semibold">
+                              First response due
+                            </span>
+                          )}
+                          {t.tags && t.tags.length > 0 && t.tags.slice(0, 2).map((tag, idx) => (
+                            <span key={idx} className="px-1.5 py-0.5 rounded bg-[#f1f5f9] text-[#475569] text-[10px] font-medium border border-[#e2e8f0]">
+                              {tag}
+                            </span>
+                          ))}
+                          <h2 className="text-sm font-semibold text-[#12344d] hover:text-[#186ade] transition-colors truncate">
                             {t.subject}
                           </h2>
-                          <span className="text-xs font-mono text-gray-400 font-medium">
-                            #{t.ticket_number}
+                          <span className="text-xs text-gray-500 font-normal">
+                            #{t.ticket_number?.replace(/^AIV-0*/, '') || t.ticket_number}
                           </span>
                         </div>
 
                         {/* Metadata line */}
-                        <div className="flex items-center gap-2 text-xs text-gray-500 mt-1.5 flex-wrap">
-                          <span className="inline-flex items-center gap-1 font-semibold text-gray-700">
-                            <Mail className="w-3.5 h-3.5 text-gray-400" />
+                        <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                          <span className="inline-flex items-center gap-1 font-medium text-gray-700">
+                            <Mail className="w-3 h-3 text-gray-400" />
                             {requesterName} {t.accounts?.company_name ? `(${t.accounts.company_name})` : ''}
                           </span>
 
@@ -1056,53 +1013,54 @@ export function FreshdeskTicketInbox() {
                     {/* Right Inline Triage Dropdowns */}
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="flex items-center gap-2 flex-shrink-0 self-end md:self-center border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto justify-end"
+                      className="flex items-center gap-4 flex-shrink-0 self-end md:self-center border-t md:border-t-0 pt-2 md:pt-0 w-full md:w-auto justify-end text-xs text-[#12344d]"
                     >
-                      {/* Priority Dropdown */}
-                      <div className="relative">
-                        <span className={`w-2 h-2 rounded-full absolute left-2.5 top-1/2 -translate-y-1/2 ${PRIORITY_CONFIG[t.priority]?.dotColor || 'bg-gray-400'}`} />
+                      {/* Priority Dropdown with colored dot */}
+                      <div className="relative flex items-center">
+                        <span className={`w-2 h-2 rounded-full mr-1.5 ${PRIORITY_CONFIG[t.priority]?.dotColor || 'bg-gray-400'}`} />
                         <select
                           value={t.priority}
                           onChange={(e) => handleUpdateTicket(t.id, { priority: e.target.value as TicketPriority })}
-                          className={`text-xs font-bold rounded-lg pl-6 pr-6 py-1.5 border appearance-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${PRIORITY_CONFIG[t.priority]?.bgColor || 'bg-gray-100'}`}
+                          className="text-xs font-semibold bg-transparent text-gray-800 appearance-none cursor-pointer focus:outline-none pr-3"
                         >
                           <option value="P4">Low</option>
                           <option value="P3">Medium</option>
                           <option value="P2">High</option>
                           <option value="P1">Urgent</option>
                         </select>
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current text-[10px]">▼</span>
+                        <ChevronDown className="w-3 h-3 text-gray-400 -ml-2 pointer-events-none" />
                       </div>
 
                       {/* Assignee Dropdown */}
-                      <div className="relative">
+                      <div className="relative flex items-center">
+                        <span className="text-gray-400 mr-1 text-[11px]">👤</span>
                         <select
                           value={t.assigned_agent_id || ''}
                           onChange={(e) => handleUpdateTicket(t.id, { assigned_agent_id: e.target.value || null })}
-                          className="bg-gray-50 border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg px-2.5 py-1.5 appearance-none pr-6 cursor-pointer hover:bg-gray-100 focus:outline-none"
+                          className="bg-transparent text-gray-700 text-xs font-medium appearance-none cursor-pointer focus:outline-none pr-3"
                         >
                           <option value="">-- / Unassigned</option>
                           {agents.map((a) => (
                             <option key={a.id} value={a.id}>
-                              {fullName(a.first_name, a.last_name)}
+                              -- / {fullName(a.first_name, a.last_name)}
                             </option>
                           ))}
                         </select>
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">▼</span>
+                        <ChevronDown className="w-3 h-3 text-gray-400 -ml-2 pointer-events-none" />
                       </div>
 
                       {/* Status Dropdown */}
-                      <div className="relative">
+                      <div className="relative flex items-center">
                         <select
                           value={t.status}
                           onChange={(e) => handleUpdateTicket(t.id, { status: e.target.value as TicketStatus })}
-                          className="bg-white border border-gray-300 text-gray-800 text-xs font-bold rounded-lg px-2.5 py-1.5 appearance-none pr-6 cursor-pointer hover:bg-gray-50 focus:outline-none"
+                          className="bg-transparent text-gray-800 text-xs font-semibold appearance-none cursor-pointer focus:outline-none pr-3"
                         >
                           {Object.entries(STATUS_LABELS).map(([k, v]) => (
                             <option key={k} value={k}>{v}</option>
                           ))}
                         </select>
-                        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 text-[10px]">▼</span>
+                        <ChevronDown className="w-3 h-3 text-gray-400 -ml-2 pointer-events-none" />
                       </div>
                     </div>
                   </div>
@@ -1453,14 +1411,64 @@ export function FreshdeskTicketInbox() {
 
               {/* Types Include */}
               {matchesFieldSearch('Types Include') && (
-                <div className="space-y-1">
+                <div className="space-y-1 relative">
                   <label className="text-xs font-bold text-gray-700">Types Include</label>
-                  <select value={filterType} onChange={(e) => setFilterType(e.target.value)} className="w-full bg-gray-50 border border-gray-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none font-medium cursor-pointer">
-                    <option value="any">Any</option>
-                    {types.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                  <div
+                    onClick={() => setShowTypeFilterDropdown(!showTypeFilterDropdown)}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 border rounded-lg text-xs font-medium cursor-pointer transition-all bg-white ${
+                      showTypeFilterDropdown
+                        ? 'border-[#2c7be5] ring-[2px] ring-blue-500/20'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className={filterType === 'any' ? 'text-gray-600' : 'text-gray-900 font-semibold'}>
+                      {filterType === 'any' ? 'Any' : (types.find(t => t.id === filterType)?.name || filterType)}
+                    </span>
+                    <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${showTypeFilterDropdown ? 'rotate-180' : ''}`} />
+                  </div>
+
+                  {showTypeFilterDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-20" onClick={() => setShowTypeFilterDropdown(false)} />
+                      <div className="absolute left-0 right-0 z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden py-1 max-h-56 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFilterType('any');
+                            setShowTypeFilterDropdown(false);
+                          }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between ${
+                            filterType === 'any'
+                              ? 'bg-[#e9f2ff] text-[#12344d] font-semibold'
+                              : 'text-gray-700 hover:bg-[#f3f7fe]'
+                          }`}
+                        >
+                          <span>Any</span>
+                        </button>
+                        {types.map((t) => {
+                          const isSelected = filterType === t.id;
+                          return (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => {
+                                setFilterType(t.id);
+                                setShowTypeFilterDropdown(false);
+                              }}
+                              className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between ${
+                                isSelected
+                                  ? 'bg-[#e9f2ff] text-[#12344d] font-semibold'
+                                  : 'text-gray-700 hover:bg-[#f3f7fe]'
+                              }`}
+                            >
+                              <span>{t.name}</span>
+                              {isSelected && <Check className="w-3.5 h-3.5 text-[#2c7be5]" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

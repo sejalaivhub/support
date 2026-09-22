@@ -92,10 +92,8 @@ export function CreateTicket() {
     setLoading(true);
     setError(null);
 
-    const activeAccountId = profile?.account_id || 'a0000000-0000-0000-0000-000000000001';
+    const activeAccountId = profile?.account_id || '00000000-0000-0000-0000-000000001001';
     const selectedType = types.find((t) => t.id === ticketType);
-
-
 
     let dbTicket: any;
     try {
@@ -111,6 +109,7 @@ export function CreateTicket() {
         urgency,
         environment,
         aiv_version: aivVersion || null,
+        assigned_agent_id: '00000000-0000-0000-0000-000000000a03',
         status: 'NEW',
       }).select().single();
 
@@ -150,7 +149,7 @@ export function CreateTicket() {
         id: localId,
         ticket_number: ticketNum,
         account_id: activeAccountId,
-        created_by_user_id: profile?.id || 'demo-user',
+        created_by_user_id: profile?.id || 'a88e9f9c-49f2-46cc-ae61-fc9d3282fc20',
         ticket_type_id: ticketType || null,
         category_id: category || null,
         subject: subject.trim(),
@@ -163,10 +162,11 @@ export function CreateTicket() {
         status: 'NEW',
         environment,
         aiv_version: aivVersion || null,
+        assigned_agent_id: '00000000-0000-0000-0000-000000000a03',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         accounts: { id: activeAccountId, company_name: 'Acme Corp', account_code: 'ACME001' },
-        created_by_user: profile ? { id: profile.id, first_name: profile.first_name, last_name: profile.last_name, email: profile.email } : undefined,
+        created_by_user: profile ? { id: profile.id, first_name: profile.first_name, last_name: profile.last_name, email: profile.email } : { id: 'a88e9f9c-49f2-46cc-ae61-fc9d3282fc20', first_name: 'Sejal', last_name: 'Prasad', email: 'sejal@aivhub.com' },
       };
 
       try {

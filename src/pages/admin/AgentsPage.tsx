@@ -10,7 +10,8 @@ import {
   getStoredAgents, saveAgent, deleteAgent, getStoredRoles
 } from '@/lib/agentRoleService';
 import { dbClient } from '@/lib/dbClient';
-import { sendAccountActivationEmail } from '@/lib/emailService';
+import { useAuth } from '@/contexts/AuthContext';
+import { sendAccountActivationEmail, sendNewAgentAddedNotification } from '@/lib/emailService';
 import type { Agent, AgentType, TicketAccessScope, AgentStatus, Role } from '@/types/agentRole';
 import type { SupportTeam } from '@/types';
 
@@ -39,6 +40,7 @@ const LANGUAGES = [
 ];
 
 export function AgentsPage() {
+  const { profile } = useAuth();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [teams, setTeams] = useState<SupportTeam[]>(DEFAULT_TEAMS);
@@ -231,12 +233,30 @@ export function AgentsPage() {
     setAgents(updated);
 
     if (!editingAgent) {
+      // 1. Send activation email to the newly created agent
       sendAccountActivationEmail({
         id: agentToSave.id,
         first_name: agentToSave.first_name,
         last_name: agentToSave.last_name,
         email: agentToSave.email,
         user_type: 'agent',
+      });
+
+      // 2. Send Freshdesk "A new agent was added to your account" notification to Account Administrator
+      const roleObj = roles.find(r => r.id === (form.role_ids[0] || ''));
+      const roleName = roleObj ? roleObj.name : 'Agent';
+      const addedByName = profile ? `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || 'Sejal prasad' : 'Sejal prasad';
+      const fullTimeCount = updated.filter(a => a.agent_type === 'FULL_TIME').length;
+      const occasionalCount = updated.filter(a => a.agent_type === 'OCCASIONAL').length;
+
+      sendNewAgentAddedNotification({
+        newAgentName: `${agentToSave.first_name} ${agentToSave.last_name}`.trim(),
+        newAgentEmail: agentToSave.email,
+        agentType: agentToSave.agent_type === 'FULL_TIME' ? 'Full time' : 'Occasional',
+        roleName: roleName,
+        addedByName: addedByName,
+        fullTimeCount: fullTimeCount,
+        occasionalCount: occasionalCount,
       });
     }
 

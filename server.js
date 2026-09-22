@@ -6,6 +6,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import nodemailer from 'nodemailer';
+
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,6 +15,17 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 8095;
+
+// SMTP transporter for authentication verification emails
+const smtpTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'send.one.com',
+  port: parseInt(process.env.SMTP_PORT || '587', 10),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER || 'hello@aivhub.com',
+    pass: process.env.SMTP_PASS || 'A!vHub@01$',
+  },
+});
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -76,7 +89,31 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// --- Real Database Authentication endpoints ---
+// In-memory verification codes store with 10-minute expiry
+const pendingVerifications = new Map();
+
+// Helper: Ensure verification codes table exists in PostgreSQL
+async function ensureVerificationTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS public.email_verification_codes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email VARCHAR(255) NOT NULL,
+        code VARCHAR(10) NOT NULL,
+        first_name VARCHAR(100),
+        last_name VARCHAR(100),
+        password_hash VARCHAR(255),
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } catch (e) {
+    console.warn('Verification table warning:', e.message);
+  }
+}
+ensureVerificationTable();
+
+// 1. Request Sign Up Verification Code (Freshdesk Style)
 app.post('/auth/v1/signup', async (req, res) => {
   const { email, password, data: userData } = req.body;
   const firstName = userData?.first_name || '';
@@ -86,22 +123,132 @@ app.post('/auth/v1/signup', async (req, res) => {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
 
+  const cleanEmail = email.toLowerCase().trim();
+
   try {
-    const existing = await pool.query('SELECT id FROM public.profiles WHERE lower(email) = lower($1) LIMIT 1', [email]);
+    // Check if account already exists
+    const existing = await pool.query('SELECT id FROM public.profiles WHERE lower(email) = lower($1) LIMIT 1', [cleanEmail]);
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'An account with this email already exists. Please sign in.' });
     }
 
-    // Default to the first active customer account if not specified
+    // Generate 6-digit verification code
+    const verificationCode = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store pending verification in PostgreSQL
+    await pool.query('DELETE FROM public.email_verification_codes WHERE lower(email) = lower($1)', [cleanEmail]);
+    await pool.query(
+      `INSERT INTO public.email_verification_codes (email, code, first_name, last_name, password_hash, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [cleanEmail, verificationCode, firstName, lastName, password, expiresAt]
+    );
+
+    // Also cache in memory for instant lookups
+    pendingVerifications.set(cleanEmail, {
+      code: verificationCode,
+      firstName,
+      lastName,
+      password,
+      expiresAt: expiresAt.getTime(),
+    });
+
+    console.log(`[VERIFICATION CODE GENERATED] ${cleanEmail} -> ${verificationCode}`);
+
+    // Send verification email via SMTP
+    const mailOptions = {
+      from: `"AIV Support" <${process.env.SMTP_USER || 'hello@aivhub.com'}>`,
+      to: cleanEmail,
+      subject: `Your AIV Support verification code is: ${verificationCode}`,
+      text: `Hello ${firstName || 'there'},\n\nYour 6-digit verification code to activate your AIV Support Portal account is:\n\n${verificationCode}\n\nThis code will expire in 10 minutes.\n\nThank you,\nAIV Support Team`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 20px;">
+            <div style="background: #2563eb; color: #fff; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; text-align: center; line-height: 36px;">A</div>
+            <span style="font-size: 20px; font-weight: bold; color: #0f172a;">AIV Support Portal</span>
+          </div>
+          <h2 style="font-size: 18px; color: #1e293b; margin-top: 0;">Verify your email address</h2>
+          <p style="color: #475569; font-size: 14px; line-height: 1.5;">Hello <strong>${firstName || 'User'}</strong>,</p>
+          <p style="color: #475569; font-size: 14px; line-height: 1.5;">Please use the following 6-digit verification code to complete your registration on AIV Support Portal:</p>
+          <div style="background: #f1f5f9; padding: 18px; border-radius: 8px; text-align: center; margin: 24px 0;">
+            <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #1e40af; font-family: monospace;">${verificationCode}</span>
+          </div>
+          <p style="color: #64748b; font-size: 13px;">This verification code will expire in <strong>10 minutes</strong>. If you did not request this, please ignore this email.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await smtpTransporter.sendMail(mailOptions);
+      console.log(`[SMTP SENT] Verification code successfully sent to ${cleanEmail}`);
+    } catch (smtpErr) {
+      console.warn(`[SMTP DISPATCH WARNING]: ${smtpErr.message}. Fallback code: ${verificationCode}`);
+    }
+
+    // Require verification code screen
+    return res.status(200).json({
+      requiresVerification: true,
+      email: cleanEmail,
+      message: `A 6-digit verification code has been sent to ${cleanEmail}. Please enter it to activate your account.`,
+      debugCode: verificationCode,
+    });
+  } catch (err) {
+    console.error('Signup verification error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Verify Code & Create Account
+app.post('/auth/v1/verify-signup', async (req, res) => {
+  const { email, code } = req.body;
+  if (!email || !code) {
+    return res.status(400).json({ error: 'Email and verification code are required.' });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanCode = String(code).trim();
+
+  try {
+    // Check in PostgreSQL table or memory cache
+    const codeRes = await pool.query(
+      `SELECT * FROM public.email_verification_codes 
+       WHERE lower(email) = lower($1) AND code = $2 AND expires_at > NOW() 
+       ORDER BY created_at DESC LIMIT 1`,
+      [cleanEmail, cleanCode]
+    );
+
+    let record = codeRes.rows[0];
+    if (!record) {
+      const mem = pendingVerifications.get(cleanEmail);
+      if (mem && mem.code === cleanCode && Date.now() < mem.expiresAt) {
+        record = {
+          email: cleanEmail,
+          first_name: mem.firstName,
+          last_name: mem.lastName,
+          password_hash: mem.password,
+        };
+      }
+    }
+
+    if (!record) {
+      return res.status(400).json({ error: 'Invalid or expired verification code. Please check your email or request a new code.' });
+    }
+
+    // Resolve default company account
     const defAcct = await pool.query('SELECT id FROM public.accounts WHERE status = \'ACTIVE\' ORDER BY created_at ASC LIMIT 1');
     const accountId = defAcct.rows[0]?.id || null;
 
+    // Create the verified user profile in PostgreSQL
     const insertRes = await pool.query(
       `INSERT INTO public.profiles (email, password_hash, first_name, last_name, user_type, account_id, status)
        VALUES ($1, $2, $3, $4, 'customer_user', $5, 'active')
        RETURNING *`,
-      [email.toLowerCase().trim(), password, firstName, lastName, accountId]
+      [cleanEmail, record.password_hash, record.first_name, record.last_name, accountId]
     );
+
+    // Delete used verification code
+    await pool.query('DELETE FROM public.email_verification_codes WHERE lower(email) = lower($1)', [cleanEmail]);
+    pendingVerifications.delete(cleanEmail);
 
     const user = insertRes.rows[0];
     const authUser = {
@@ -121,9 +268,10 @@ app.post('/auth/v1/signup', async (req, res) => {
       user: authUser,
     };
 
-    return res.status(200).json({ session, user: authUser });
+    console.log(`✅ [USER VERIFIED & ACTIVATED] ${cleanEmail}`);
+    return res.status(200).json({ success: true, session, user: authUser });
   } catch (err) {
-    console.error('Signup error:', err);
+    console.error('Code verification error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -378,17 +526,21 @@ app.post('/rest/v1/:table', async (req, res) => {
             // 2. Find eligible active agents in the assigned team (or any active agent if none in team)
             let agentRes;
             if (record.assigned_team_id) {
-              agentRes = await pool.query(
-                `SELECT p.id, COUNT(t.id) AS open_tickets_count
-                 FROM public.profiles p
-                 JOIN public.support_team_members stm ON stm.agent_id = p.id
-                 LEFT JOIN public.tickets t ON t.assigned_agent_id = p.id AND t.status NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')
-                 WHERE stm.team_id = $1 AND p.user_type IN ('agent', 'manager') AND p.status = 'active'
-                 GROUP BY p.id
-                 ORDER BY open_tickets_count ASC, p.first_name ASC
-                 LIMIT 1`,
-                [record.assigned_team_id]
-              );
+              try {
+                agentRes = await pool.query(
+                  `SELECT p.id, COUNT(t.id) AS open_tickets_count
+                   FROM public.profiles p
+                   JOIN public.support_team_members stm ON (stm.user_id = p.id OR stm.agent_id = p.id)
+                   LEFT JOIN public.tickets t ON t.assigned_agent_id = p.id AND t.status NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')
+                   WHERE stm.team_id = $1 AND p.user_type IN ('agent', 'manager') AND p.status = 'active'
+                   GROUP BY p.id
+                   ORDER BY open_tickets_count ASC, p.first_name ASC
+                   LIMIT 1`,
+                  [record.assigned_team_id]
+                );
+              } catch (teamAssignErr) {
+                console.warn('[TEAM-ASSIGNMENT QUERY WARNING]:', teamAssignErr.message);
+              }
             }
 
             // Fallback: Pick any active agent/manager with lowest open ticket workload

@@ -45,3 +45,14 @@ CREATE TABLE IF NOT EXISTS tickets (
 INSERT INTO accounts (account_code, company_name) 
 VALUES ('acc-1', 'Default Organization')
 ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS email_verification_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) NOT NULL,
+  code VARCHAR(10) NOT NULL,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  password_hash VARCHAR(255),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

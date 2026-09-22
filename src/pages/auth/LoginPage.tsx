@@ -6,13 +6,15 @@ import { Headphones, AlertCircle } from 'lucide-react';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const { signIn, signUp, verifyCode } = useAuth();
+  const [mode, setMode] = useState<'login' | 'signup' | 'verify'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,19 +30,47 @@ export function LoginPage() {
       } else {
         navigate('/');
       }
-    } else {
+    } else if (mode === 'signup') {
       if (!firstName.trim() || !lastName.trim()) {
         setError('Please enter your first and last name.');
         setLoading(false);
         return;
       }
-      const { error } = await signUp(email, password, firstName, lastName);
+      const res = await signUp(email, password, firstName, lastName);
+      setLoading(false);
+      if (res.error) {
+        setError(res.error);
+      } else if (res.requiresVerification) {
+        setInfoMessage(res.message || `We sent a 6-digit verification code to ${email}. Please check your inbox.`);
+        setMode('verify');
+      } else {
+        navigate('/');
+      }
+    } else if (mode === 'verify') {
+      if (!code.trim() || code.trim().length < 6) {
+        setError('Please enter the complete 6-digit verification code.');
+        setLoading(false);
+        return;
+      }
+      const { error } = await verifyCode(email, code.trim());
       setLoading(false);
       if (error) {
         setError(error);
       } else {
         navigate('/');
       }
+    }
+  };
+
+  const handleResendCode = async () => {
+    setError(null);
+    setLoading(true);
+    const res = await signUp(email, password, firstName, lastName);
+    setLoading(false);
+    if (res.error) {
+      setError(res.error);
+    } else {
+      setInfoMessage(`A fresh verification code has been dispatched to ${email}.`);
     }
   };
 
@@ -87,13 +117,21 @@ export function LoginPage() {
           </div>
 
           <h2 className="text-2xl font-bold text-gray-900 mb-1">
-            {mode === 'login' ? 'Welcome back' : 'Create your account'}
+            {mode === 'login' ? 'Welcome back' : mode === 'signup' ? 'Create your account' : 'Verify your email'}
           </h2>
           <p className="text-sm text-gray-500 mb-6">
             {mode === 'login'
               ? 'Sign in to access your support portal'
-              : 'Sign up to start managing your support tickets'}
+              : mode === 'signup'
+              ? 'Sign up to start managing your support tickets'
+              : `Enter the 6-digit code sent to ${email}`}
           </p>
+
+          {infoMessage && mode === 'verify' && (
+            <div className="p-3 mb-4 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
+              {infoMessage}
+            </div>
+          )}
 
           {error && (
             <div className="flex items-start gap-2 p-3 mb-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -109,38 +147,81 @@ export function LoginPage() {
                 <Input label="Last Name" value={lastName} onChange={setLastName} required placeholder="Smith" />
               </div>
             )}
-            <Input label="Email" type="email" value={email} onChange={setEmail} required placeholder="you@company.com" />
-            <Input label="Password" type="password" value={password} onChange={setPassword} required placeholder="••••••••" />
+
+            {mode !== 'verify' && (
+              <>
+                <Input label="Email" type="email" value={email} onChange={setEmail} required placeholder="you@company.com" />
+                <Input label="Password" type="password" value={password} onChange={setPassword} required placeholder="••••••••" />
+              </>
+            )}
+
+            {mode === 'verify' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                  6-Digit Verification Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ''))}
+                  placeholder="123456"
+                  autoFocus
+                  required
+                  className="w-full text-center tracking-[12px] font-mono text-2xl py-3 px-4 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
+                />
+                <div className="flex justify-between items-center mt-2 text-xs">
+                  <span className="text-gray-500">Didn't receive the code?</span>
+                  <button
+                    type="button"
+                    onClick={handleResendCode}
+                    disabled={loading}
+                    className="text-blue-600 font-medium hover:underline disabled:opacity-50"
+                  >
+                    Resend Code
+                  </button>
+                </div>
+              </div>
+            )}
 
             <Button type="submit" disabled={loading} className="w-full" size="lg">
-              {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+              {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : mode === 'signup' ? 'Send Verification Code' : 'Verify & Activate Account'}
             </Button>
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">
-            {mode === 'login' ? (
+            {mode === 'verify' ? (
+              <button
+                onClick={() => { setMode('signup'); setError(null); setInfoMessage(null); }}
+                className="text-blue-600 font-medium hover:underline"
+              >
+                ← Back to sign up
+              </button>
+            ) : mode === 'login' ? (
               <>
                 Don't have an account?{' '}
-                <button onClick={() => { setMode('signup'); setError(null); }} className="text-blue-600 font-medium hover:underline">
+                <button onClick={() => { setMode('signup'); setError(null); setInfoMessage(null); }} className="text-blue-600 font-medium hover:underline">
                   Sign up
                 </button>
               </>
             ) : (
               <>
                 Already have an account?{' '}
-                <button onClick={() => { setMode('login'); setError(null); }} className="text-blue-600 font-medium hover:underline">
+                <button onClick={() => { setMode('login'); setError(null); setInfoMessage(null); }} className="text-blue-600 font-medium hover:underline">
                   Sign in
                 </button>
               </>
             )}
           </div>
 
-          <div className="mt-8 p-3 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-700">
-            <p className="font-medium mb-1">Demo accounts (sign up with these emails to activate):</p>
-            <p>Customer: john.smith@acme.com, alice@globex.com</p>
-            <p>Agent: agent1@aivsupport.com, agent2@aivsupport.com</p>
-            <p>Admin: admin@aivsupport.com, manager@aivsupport.com</p>
-          </div>
+          {mode !== 'verify' && (
+            <div className="mt-8 p-3 rounded-lg bg-blue-50 border border-blue-100 text-xs text-blue-700">
+              <p className="font-medium mb-1">Demo accounts (sign up with these emails to activate):</p>
+              <p>Customer: john.smith@acme.com, alice@globex.com</p>
+              <p>Agent: agent1@aivsupport.com, agent2@aivsupport.com</p>
+              <p>Admin: admin@aivsupport.com, manager@aivsupport.com</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

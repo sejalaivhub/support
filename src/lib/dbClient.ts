@@ -27,14 +27,10 @@ export interface QueryResult<T = any> {
 }
 
 const getApiBaseUrl = () => {
+  // In the browser, use relative paths ('') so the requests go to port 8092 and are proxied to 8095
+  // This completely eliminates cross-port firewall blocks and CORS errors!
   if (typeof window !== 'undefined') {
-    const host = window.location.hostname || 'localhost';
-    const protocol = window.location.protocol || 'http:';
-    const envUrl = import.meta.env.VITE_BACKEND_API_URL || import.meta.env.VITE_API_URL;
-    if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
-      return envUrl.replace(/\/$/, '');
-    }
-    return `${protocol}//${host}:8095`;
+    return '';
   }
   return (import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:8095').replace(/\/$/, '');
 };
@@ -123,7 +119,8 @@ export class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   }
 
   private buildUrl(): string {
-    const url = new URL(`${API_BASE_URL}/rest/v1/${this.tableName}`);
+    const base = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8095');
+    const url = new URL(`${base}/rest/v1/${this.tableName}`);
     if (this.selectCols && this.selectCols !== '*') {
       url.searchParams.set('select', this.selectCols);
     }
@@ -236,7 +233,8 @@ export class MutationBuilder<T = any> implements PromiseLike<QueryResult<T>> {
 
   async execute(): Promise<QueryResult<T>> {
     try {
-      const url = new URL(`${API_BASE_URL}/rest/v1/${this.tableName}`);
+      const base = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8095');
+      const url = new URL(`${base}/rest/v1/${this.tableName}`);
       for (const f of this.filters) {
         if (f.op === 'in') {
           const list = Array.isArray(f.val) ? f.val.join(',') : f.val;
@@ -353,6 +351,26 @@ class AuthClient {
       const data = await res.json();
       if (!res.ok || data.error) {
         return { data: { session: null, user: null }, error: { message: data.error || 'Signup failed' } };
+      }
+      return { data: { session: data.session || null, user: data.user || null, ...data }, error: null };
+    } catch (err: any) {
+      return { data: { session: null, user: null }, error: { message: err?.message || 'Network error' } };
+    }
+  }
+
+  async verifySignupCode(email: string, code: string): Promise<{
+    data: { session: Session | null; user: SessionUser | null };
+    error: { message: string } | null;
+  }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/v1/verify-signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        return { data: { session: null, user: null }, error: { message: data.error || 'Verification failed' } };
       }
       if (data.session) {
         authSubscribers.forEach((cb) => cb('SIGNED_IN', data.session));

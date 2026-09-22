@@ -7,7 +7,8 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, firstName: string, lastName: string) => Promise<{ error: string | null; requiresVerification?: boolean; message?: string }>;
+  verifyCode: (email: string, code: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -258,6 +259,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) {
         return { error: error.message || 'Registration failed' };
       }
+      if ((data as any)?.requiresVerification) {
+        return { error: null, requiresVerification: true, message: (data as any)?.message };
+      }
       if (data && data.session) {
         localStorage.setItem('explicit_login', 'true');
         localStorage.setItem('demo_session', JSON.stringify(data.session));
@@ -268,6 +272,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: 'Registration could not be completed.' };
     } catch (err: any) {
       return { error: err.message || 'Network error during registration' };
+    }
+  }, [fetchProfile]);
+
+  const verifyCode = useCallback(async (email: string, code: string) => {
+    try {
+      const { data, error } = await dbClient.auth.verifySignupCode(email, code);
+      if (error) {
+        return { error: error.message || 'Verification failed' };
+      }
+      if (data && data.session) {
+        localStorage.setItem('explicit_login', 'true');
+        localStorage.setItem('demo_session', JSON.stringify(data.session));
+        setSession(data.session);
+        await fetchProfile();
+        return { error: null };
+      }
+      return { error: 'Verification succeeded but session could not be started.' };
+    } catch (err: any) {
+      return { error: err.message || 'Network error during verification' };
     }
   }, [fetchProfile]);
 
@@ -289,7 +312,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile]);
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ session, profile, loading, signIn, signUp, verifyCode, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );

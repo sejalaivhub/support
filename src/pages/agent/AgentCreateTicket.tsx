@@ -4,9 +4,10 @@ import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select } from '@/components/ui';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
-import type { TicketType, TicketCategory, TicketPriority, Account, Profile, TicketWithRelations } from '@/types';
-import { ArrowLeft, Send, BookOpen, User, BarChart2, Bot, ChevronDown, X, Plus, Trash2, Settings as SettingsIcon, Ticket, Mail, Phone, Copy, ExternalLink, CheckCircle2 } from 'lucide-react';
+import type { TicketType, TicketCategory, TicketPriority, Account, Profile, TicketWithRelations, SupportTeam } from '@/types';
+import { ArrowLeft, Send, BookOpen, User, BarChart2, Bot, ChevronDown, X, Plus, Trash2, Settings as SettingsIcon, Ticket, Mail, Phone, Copy, ExternalLink, CheckCircle2, Check } from 'lucide-react';
 import { sendTicketAcknowledgement } from '@/lib/emailService';
+import { getStoredAgents } from '@/lib/agentRoleService';
 
 interface UploadedFile {
   url: string;
@@ -25,11 +26,11 @@ const DEMO_ACCOUNTS: Account[] = [
 ];
 
 const DEMO_TYPES: TicketType[] = [
-  { id: 'type-1', name: 'Incident', is_active: true, sort_order: 1 },
-  { id: 'type-2', name: 'Service Request', is_active: true, sort_order: 2 },
-  { id: 'type-3', name: 'Question', is_active: true, sort_order: 3 },
-  { id: 'type-4', name: 'Change Request', is_active: true, sort_order: 4 },
-  { id: 'type-5', name: 'Problem', is_active: true, sort_order: 5 },
+  { id: 'type-question', name: 'Question', is_active: true, sort_order: 1 },
+  { id: 'type-incident', name: 'Incident', is_active: true, sort_order: 2 },
+  { id: 'type-problem', name: 'Problem', is_active: true, sort_order: 3 },
+  { id: 'type-feature-request', name: 'Feature Request', is_active: true, sort_order: 4 },
+  { id: 'type-refund', name: 'Refund', is_active: true, sort_order: 5 },
 ];
 
 const DEMO_CATEGORIES: TicketCategory[] = [
@@ -104,7 +105,7 @@ export function AgentCreateTicket() {
         const customUsers = JSON.parse(localStorage.getItem('local_custom_users') || '[]');
         const updatedCustom = [newProfile, ...customUsers.filter((u: any) => u.id !== newProfile.id && u.email !== newProfile.email)];
         localStorage.setItem('local_custom_users', JSON.stringify(updatedCustom));
-      } catch (err) {}
+      } catch (err) { }
 
       // 2. Persist to PostgreSQL via API/PostgreSQL bridge
       try {
@@ -146,6 +147,7 @@ export function AgentCreateTicket() {
   const [createdBy, setCreatedBy] = useState('');
   const [contactSearchTerm, setContactSearchTerm] = useState('');
   const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
+  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<TicketPriority>('P3');
@@ -155,17 +157,27 @@ export function AgentCreateTicket() {
   const [environment, setEnvironment] = useState('Production');
   const [aivVersion, setAivVersion] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [teams, setTeams] = useState<SupportTeam[]>([]);
+  const [agents, setAgents] = useState<Profile[]>([]);
+  const [assignedTeamId, setAssignedTeamId] = useState('');
+  const [assignedAgentId, setAssignedAgentId] = useState('');
+  const [product, setProduct] = useState('Example');
+  const [referenceNumber, setReferenceNumber] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
+  const [createAnother, setCreateAnother] = useState(false);
+  const [ticketStatus, setTicketStatus] = useState('Open');
+  const [ticketSource, setTicketSource] = useState('Phone');
 
   const loadContacts = async (filterAccountId?: string) => {
     let customUsers: Profile[] = [];
     try {
       customUsers = JSON.parse(localStorage.getItem('local_custom_users') || '[]');
-    } catch (e) {}
+    } catch (e) { }
 
     let deletedUserIds: string[] = [];
     try {
       deletedUserIds = JSON.parse(localStorage.getItem('deleted_user_ids') || '[]');
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       let query = dbClient.from('profiles').select('*').eq('status', 'active').order('first_name');
@@ -178,27 +190,37 @@ export function AgentCreateTicket() {
         ? customUsers.filter(u => (!u.account_id || u.account_id === filterAccountId) && !deletedUserIds.includes(u.id))
         : customUsers.filter(u => !deletedUserIds.includes(u.id));
 
+      const deduplicateProfiles = (list: Profile[]) => {
+        const emailMap = new Map<string, Profile>();
+        for (const u of list) {
+          if (deletedUserIds.includes(u.id)) continue;
+          const key = (u.email || '').trim().toLowerCase() || u.id;
+          if (!emailMap.has(key)) {
+            emailMap.set(key, u);
+          }
+        }
+        return Array.from(emailMap.values());
+      };
+
       if (data && data.length > 0) {
-        // Merge and deduplicate by id
-        const map = new Map<string, Profile>();
-        (data as Profile[]).forEach(u => { if (!deletedUserIds.includes(u.id)) map.set(u.id, u); });
-        filteredCustom.forEach(u => map.set(u.id, u));
-        setUsers(Array.from(map.values()));
+        setUsers(deduplicateProfiles([...filteredCustom, ...(data as Profile[])]));
       } else {
         const fallbackDemo = filterAccountId
           ? (DEMO_USERS[filterAccountId] || []).filter(u => !deletedUserIds.includes(u.id))
           : Object.values(DEMO_USERS).flat().filter(u => !deletedUserIds.includes(u.id));
-        
-        const map = new Map<string, Profile>();
-        fallbackDemo.forEach(u => map.set(u.id, u));
-        filteredCustom.forEach(u => map.set(u.id, u));
-        setUsers(Array.from(map.values()));
+
+        setUsers(deduplicateProfiles([...filteredCustom, ...fallbackDemo]));
       }
     } catch (err) {
       const fallbackDemo = filterAccountId
         ? (DEMO_USERS[filterAccountId] || []).filter(u => !deletedUserIds.includes(u.id))
         : Object.values(DEMO_USERS).flat().filter(u => !deletedUserIds.includes(u.id));
-      setUsers([...customUsers, ...fallbackDemo]);
+      const emailMap = new Map<string, Profile>();
+      for (const u of [...customUsers, ...fallbackDemo]) {
+        const key = (u.email || '').trim().toLowerCase() || u.id;
+        if (!emailMap.has(key)) emailMap.set(key, u);
+      }
+      setUsers(Array.from(emailMap.values()));
     }
   };
 
@@ -206,7 +228,7 @@ export function AgentCreateTicket() {
     let customAccounts: Account[] = [];
     try {
       customAccounts = JSON.parse(localStorage.getItem('local_custom_accounts') || '[]');
-    } catch (e) {}
+    } catch (e) { }
 
     dbClient.from('ticket_types').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
       if (data && data.length > 0) setTypes(data as TicketType[]);
@@ -222,8 +244,55 @@ export function AgentCreateTicket() {
       }
     });
 
+    dbClient.from('support_teams').select('*').eq('is_active', true).order('name').then(({ data }) => {
+      if (data && data.length > 0) {
+        setTeams(data as SupportTeam[]);
+      }
+    });
+
+    const syncAgents = async () => {
+      let loaded: Profile[] = [];
+      try {
+        const { data } = await dbClient.from('profiles').select('*').in('user_type', ['agent', 'manager', 'account_manager', 'admin']).order('first_name');
+        if (data && data.length > 0) {
+          loaded = data as Profile[];
+        }
+      } catch (e) {}
+
+      // Also merge custom stored agents
+      const stored = getStoredAgents();
+      const map = new Map<string, Profile>();
+      loaded.forEach(p => map.set(p.id, p));
+      stored.forEach(a => {
+        if (!map.has(a.id)) {
+          map.set(a.id, {
+            id: a.id,
+            first_name: a.first_name,
+            last_name: a.last_name,
+            email: a.email,
+            user_type: 'agent',
+            account_id: null,
+            status: a.status === 'ACTIVE' ? 'active' : 'inactive',
+            phone: a.phone,
+            mobile: a.mobile,
+            job_title: a.job_title,
+            auth_uid: null,
+            created_at: a.created_at,
+            updated_at: a.updated_at,
+          });
+        }
+      });
+      setAgents(Array.from(map.values()));
+    };
+
+    syncAgents();
+
+    if (profile?.id) {
+      setAssignedAgentId(profile.id);
+    }
+
     loadContacts();
-  }, []);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (accountId) {
@@ -264,20 +333,25 @@ export function AgentCreateTicket() {
     let dbSuccess = false;
 
     try {
+      const tagsArray = tagsInput.split(',').map(s => s.trim()).filter(Boolean);
       const { data: ticket, error } = await dbClient.from('tickets').insert({
-        account_id: accountId,
+        account_id: finalAccountId,
         created_by_user_id: createdBy,
         ticket_type_id: ticketType || null,
         category_id: category || null,
         subject: subject.trim(),
         description: description,
-        priority: aivPriority,
+        priority: priority,
+        customer_priority: priority,
+        aiv_priority: priority,
         environment,
         aiv_version: aivVersion || null,
-        status: 'OPEN',
-        assigned_agent_id: profile.id,
+        status: ticketStatus.toUpperCase() as any,
+        assigned_team_id: assignedTeamId || null,
+        assigned_agent_id: assignedAgentId || profile.id,
+        tags: tagsArray,
       }).select().single();
-      
+
       if (!error && ticket) {
         dbSuccess = true;
         createdTicketId = ticket.id;
@@ -340,61 +414,56 @@ export function AgentCreateTicket() {
             .maybeSingle();
 
           if (sla) {
-            const planCode = (sla as any).support_plans?.code || 'STANDARD';
+            const now = new Date();
+            const firstDue = new Date(now.getTime() + (sla.first_response_target_minutes || 60) * 60000);
+            const resDue = new Date(now.getTime() + (sla.resolution_target_minutes || 240) * 60000);
+
             await dbClient.from('ticket_sla_snapshots').insert({
               ticket_id: ticket.id,
-              support_plan_code: planCode,
-              sla_policy_id: sla.id,
-              priority,
+              support_plan_code: sla.support_plans?.code || 'STANDARD',
+              priority: aivPriority,
               first_response_target_minutes: sla.first_response_target_minutes,
               resolution_target_minutes: sla.resolution_target_minutes,
-              clock_type: sla.clock_type,
-              business_calendar_id: sla.business_calendar_id,
-              pause_on_customer_wait: sla.pause_on_customer_wait,
-              warning_75: sla.warning_75,
-              warning_90: sla.warning_90,
-              first_response_due_at: new Date(Date.now() + sla.first_response_target_minutes * 60000).toISOString(),
-              resolution_due_at: new Date(Date.now() + sla.resolution_target_minutes * 60000).toISOString(),
-            });
-            await dbClient.from('ticket_sla_events').insert({
-              ticket_id: ticket.id,
-              event_type: 'START',
-              actor_user_id: profile.id,
+              clock_type: sla.business_hours_only ? 'business' : 'calendar',
+              first_response_due_at: firstDue.toISOString(),
+              resolution_due_at: resDue.toISOString(),
             });
           }
         }
       }
-    } catch (err: any) {
-      console.warn('Database connection unavailable, falling back to local persistence:', err);
+    } catch (err) {
+      console.warn('DB ticket insert error:', err);
     }
 
     if (!dbSuccess) {
-      // Local fallback for offline/demo/placeholder mode
-      const localId = `ticket-local-${Date.now()}`;
-      const randomNum = Math.floor(100000 + Math.random() * 900000);
-      const ticketNum = `AIV-${randomNum}`;
-      createdTicketId = localId;
+      // Fallback
+      createdTicketId = `ticket-${Date.now()}`;
+      const ticketNum = `AIV-${String(Math.floor(100000 + Math.random() * 900000))}`;
+      const tagsArray = tagsInput.split(',').map(s => s.trim()).filter(Boolean);
+
+      const assignedAgentObj = agents.find(a => a.id === assignedAgentId) || profile;
+      const assignedTeamObj = teams.find(t => t.id === assignedTeamId);
 
       const fallbackTicket: TicketWithRelations = {
-        id: localId,
+        id: createdTicketId,
         ticket_number: ticketNum,
-        account_id: accountId,
+        account_id: finalAccountId,
         created_by_user_id: createdBy,
         ticket_type_id: ticketType || null,
         category_id: category || null,
         subject: subject.trim(),
         description: description,
-        priority: aivPriority,
+        priority: priority,
         customer_priority: priority,
-        aiv_priority: aivPriority,
+        aiv_priority: priority,
         impact: null,
         urgency: null,
-        status: 'OPEN',
+        status: ticketStatus.toUpperCase() as any,
         environment,
         aiv_version: aivVersion || null,
-        assigned_team_id: selectedAcct?.support_team_id || 'team-1',
-        assigned_agent_id: profile.id,
-        tags: [],
+        assigned_team_id: assignedTeamId || selectedAcct?.support_team_id || 'team-1',
+        assigned_agent_id: assignedAgentId || profile.id,
+        tags: tagsArray,
         first_human_response_at: null,
         first_response_breached: false,
         resolved_at: null,
@@ -410,7 +479,8 @@ export function AgentCreateTicket() {
         updated_at: new Date().toISOString(),
         accounts: selectedAcct ? { id: selectedAcct.id, company_name: selectedAcct.company_name, account_code: selectedAcct.account_code } : undefined,
         created_by_user: selectedUser ? { id: selectedUser.id, first_name: selectedUser.first_name, last_name: selectedUser.last_name, email: selectedUser.email } : undefined,
-        assigned_agent: { id: profile.id, first_name: profile.first_name, last_name: profile.last_name, email: profile.email },
+        assigned_agent: assignedAgentObj ? { id: assignedAgentObj.id, first_name: assignedAgentObj.first_name, last_name: assignedAgentObj.last_name, email: assignedAgentObj.email } : undefined,
+        assigned_team: assignedTeamObj ? { id: assignedTeamObj.id, name: assignedTeamObj.name } : undefined,
         ticket_types: selectedType ? { id: selectedType.id, name: selectedType.name } : undefined,
         ticket_categories: selectedCat ? { id: selectedCat.id, name: selectedCat.name } : undefined,
       };
@@ -430,7 +500,7 @@ export function AgentCreateTicket() {
             ticket_number: ticketNum,
             subject: subject.trim(),
             description: description,
-            priority: aivPriority,
+            priority: priority,
             created_at: fallbackTicket.created_at,
           },
           { email: recipientEmail, name: recipientName }
@@ -441,7 +511,17 @@ export function AgentCreateTicket() {
     }
 
     setLoading(false);
-    navigate(`/agent/tickets/${createdTicketId}`);
+    if (createAnother) {
+      setSubject('');
+      setDescription('');
+      setReferenceNumber('');
+      setTagsInput('');
+      setUploadedFiles([]);
+      setShowContactToast(true);
+      setTimeout(() => setShowContactToast(false), 3000);
+    } else {
+      navigate(`/agent/tickets/${createdTicketId}`);
+    }
   };
 
   return (
@@ -469,76 +549,129 @@ export function AgentCreateTicket() {
                 Contact <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                  <div 
-                    className="w-full flex items-center justify-between px-3 py-2 border border-blue-600 rounded-md ring-[3px] ring-blue-500/20 text-sm bg-white cursor-text"
-                    onClick={() => {
-                      if (!isContactDropdownOpen) {
-                        setContactSearchTerm('');
-                        setIsContactDropdownOpen(true);
-                      }
-                    }}
-                  >
-                    <input
-                      type="text"
-                      className="w-full outline-none bg-transparent"
-                      placeholder={createdBy && !isContactDropdownOpen ? '' : 'Search contacts...'}
-                      value={isContactDropdownOpen ? contactSearchTerm : (users.find(u => u.id === createdBy)?.first_name || '')}
-                      onChange={(e) => {
-                        setContactSearchTerm(e.target.value);
-                        setIsContactDropdownOpen(true);
-                      }}
-                      onFocus={() => {
+                {(() => {
+                  const selectedUser = users.find(u => u.id === createdBy);
+                  return (
+                    <div
+                      className={`w-full flex items-center justify-between px-3 py-2 border rounded-md text-sm bg-white cursor-text transition-all ${
+                        isContactDropdownOpen
+                          ? 'border-blue-600 ring-[3px] ring-blue-500/20'
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      onClick={() => {
                         if (!isContactDropdownOpen) {
                           setContactSearchTerm('');
                           setIsContactDropdownOpen(true);
                         }
                       }}
+                    >
+                      {selectedUser && !isContactDropdownOpen ? (
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center space-x-1.5 overflow-hidden">
+                            <span className="font-medium text-gray-900 truncate">
+                              {selectedUser.first_name} {selectedUser.last_name}
+                            </span>
+                            <span className="text-gray-500 text-xs truncate">
+                              &lt;{selectedUser.email}&gt;
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCreatedBy('');
+                              setContactSearchTerm('');
+                              setIsContactDropdownOpen(false);
+                            }}
+                            className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors ml-2"
+                            title="Clear contact"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between w-full">
+                          <input
+                            type="text"
+                            autoFocus={isContactDropdownOpen}
+                            className="w-full outline-none bg-transparent text-gray-900 placeholder-gray-400"
+                            placeholder={selectedUser ? `${selectedUser.first_name} ${selectedUser.last_name}` : 'Search contacts...'}
+                            value={contactSearchTerm}
+                            onChange={(e) => {
+                              setContactSearchTerm(e.target.value);
+                              setIsContactDropdownOpen(true);
+                            }}
+                            onFocus={() => {
+                              setIsContactDropdownOpen(true);
+                            }}
+                          />
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ml-1 ${isContactDropdownOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {isContactDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => {
+                        setIsContactDropdownOpen(false);
+                        // If nothing is selected yet and the search matches exactly 1 contact, auto-select it
+                        if (!createdBy && contactSearchTerm.trim()) {
+                          const matches = users.filter(u =>
+                            (u.first_name + ' ' + u.last_name).toLowerCase().includes(contactSearchTerm.toLowerCase()) ||
+                            u.email.toLowerCase().includes(contactSearchTerm.toLowerCase())
+                          );
+                          if (matches.length === 1) {
+                            setCreatedBy(matches[0].id);
+                            if (matches[0].account_id) setAccountId(matches[0].account_id);
+                          }
+                        }
+                      }}
                     />
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isContactDropdownOpen ? 'rotate-180' : ''}`} />
-                  </div>
-                  
-                  {isContactDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-10" onClick={() => setIsContactDropdownOpen(false)} />
                     <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto py-1">
-                      {users.filter(u => 
-                        (u.first_name + ' ' + u.last_name).toLowerCase().includes(contactSearchTerm.toLowerCase()) || 
+                      {users.filter(u =>
+                        !contactSearchTerm.trim() ||
+                        (u.first_name + ' ' + u.last_name).toLowerCase().includes(contactSearchTerm.toLowerCase()) ||
                         u.email.toLowerCase().includes(contactSearchTerm.toLowerCase())
                       ).map((u) => (
                         <button
                           key={u.id}
                           type="button"
-                          className="w-full text-left px-3 py-2.5 text-sm hover:bg-[#e6f0ff] focus:bg-[#e6f0ff] focus:outline-none rounded mx-1 mb-0.5"
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-[#e6f0ff] focus:bg-[#e6f0ff] focus:outline-none rounded mx-1 mb-0.5 flex items-center justify-between ${
+                            createdBy === u.id ? 'bg-blue-50 font-medium' : ''
+                          }`}
                           style={{ width: 'calc(100% - 8px)' }}
-                          onClick={() => {
+                          onMouseDown={(e) => {
+                            // onMouseDown fires before blur/clickaway
+                            e.preventDefault();
                             setCreatedBy(u.id);
                             if (u.account_id) setAccountId(u.account_id);
                             setContactSearchTerm('');
                             setIsContactDropdownOpen(false);
                           }}
                         >
-                          <span className="font-medium text-gray-800">{u.first_name} {u.last_name}</span>
-                          <span className="text-gray-500 ml-1.5 text-xs">&lt;{u.email}&gt;</span>
+                          <div className="truncate">
+                            <span className="font-medium text-gray-800">{u.first_name} {u.last_name}</span>
+                            <span className="text-gray-500 ml-1.5 text-xs">&lt;{u.email}&gt;</span>
+                          </div>
+                          {createdBy === u.id && (
+                            <span className="text-blue-600 text-xs ml-2 font-medium">Selected</span>
+                          )}
                         </button>
                       ))}
-                      
-                      {users.filter(u => 
-                        (u.first_name + ' ' + u.last_name).toLowerCase().includes(contactSearchTerm.toLowerCase()) || 
+
+                      {users.filter(u =>
+                        !contactSearchTerm.trim() ||
+                        (u.first_name + ' ' + u.last_name).toLowerCase().includes(contactSearchTerm.toLowerCase()) ||
                         u.email.toLowerCase().includes(contactSearchTerm.toLowerCase())
                       ).length === 0 && (
-                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                          No contacts found
+                        <div className="px-3 py-3 text-sm text-gray-500 text-center">
+                          No contacts found for "{contactSearchTerm}"
                         </div>
                       )}
-                      
-                      <div className="border-t border-gray-100 mt-1" />
-                      <button 
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-50 focus:outline-none flex items-center justify-between"
-                      >
-                        --
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </>
                 )}
@@ -565,20 +698,63 @@ export function AgentCreateTicket() {
             </div>
 
             {/* Type Field */}
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative">
               <label className="block text-xs text-gray-500">
                 Type
               </label>
-              <select
-                value={ticketType}
-                onChange={(e) => setTicketType(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+              <div
+                onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
+                className={`w-full flex items-center justify-between px-3 py-2 border rounded-md text-sm bg-white cursor-pointer transition-all ${isTypeDropdownOpen
+                  ? 'border-[#2c7be5] ring-[3px] ring-blue-500/20'
+                  : 'border-gray-300 hover:border-gray-400'
+                  }`}
               >
-                <option value="">--</option>
-                {types.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+                <span className={ticketType ? 'text-gray-800' : 'text-gray-400'}>
+                  {types.find(t => t.id === ticketType)?.name || '--'}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${isTypeDropdownOpen ? 'rotate-180' : ''}`} />
+              </div>
+
+              {isTypeDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsTypeDropdownOpen(false)} />
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden py-1 max-h-60 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTicketType('');
+                        setIsTypeDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3.5 py-2 text-sm transition-colors flex items-center justify-between ${ticketType === ''
+                        ? 'bg-[#e9f2ff] text-[#12344d] font-semibold'
+                        : 'text-gray-700 hover:bg-[#f3f7fe]'
+                        }`}
+                    >
+                      <span>--</span>
+                    </button>
+                    {types.map((t) => {
+                      const isSelected = ticketType === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setTicketType(t.id);
+                            setIsTypeDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3.5 py-2 text-sm transition-colors flex items-center justify-between ${isSelected
+                            ? 'bg-[#e9f2ff] text-[#12344d] font-semibold'
+                            : 'text-gray-700 hover:bg-[#f3f7fe]'
+                            }`}
+                        >
+                          <span>{t.name}</span>
+                          {isSelected && <Check className="w-4 h-4 text-[#2c7be5]" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Source Field */}
@@ -587,13 +763,11 @@ export function AgentCreateTicket() {
                 Source
               </label>
               <select
-                defaultValue="Phone"
+                value={ticketSource}
+                onChange={(e) => setTicketSource(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
               >
                 <option value="Phone">Phone</option>
-                <option value="Email">Email</option>
-                <option value="Portal">Portal</option>
-                <option value="Chat">Chat</option>
               </select>
             </div>
 
@@ -603,7 +777,8 @@ export function AgentCreateTicket() {
                 Status <span className="text-red-500">*</span>
               </label>
               <select
-                defaultValue="Open"
+                value={ticketStatus}
+                onChange={(e) => setTicketStatus(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
                 required
               >
@@ -611,6 +786,8 @@ export function AgentCreateTicket() {
                 <option value="Pending">Pending</option>
                 <option value="Resolved">Resolved</option>
                 <option value="Closed">Closed</option>
+                <option value="Waiting on Customer">Waiting on Customer</option>
+                <option value="Waiting on Third Party">Waiting on Third Party</option>
               </select>
             </div>
 
@@ -621,7 +798,11 @@ export function AgentCreateTicket() {
               </label>
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as TicketPriority)}
+                onChange={(e) => {
+                  const val = e.target.value as TicketPriority;
+                  setPriority(val);
+                  setAivPriority(val);
+                }}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
                 required
               >
@@ -629,6 +810,63 @@ export function AgentCreateTicket() {
                 <option value="P3">Medium</option>
                 <option value="P2">High</option>
                 <option value="P1">Urgent</option>
+              </select>
+            </div>
+
+            {/* Group Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs text-gray-500">
+                Group
+              </label>
+              <select
+                value={assignedTeamId}
+                disabled={teams.length === 0}
+                onChange={(e) => setAssignedTeamId(e.target.value)}
+                className={`w-full px-3 py-2 border rounded-md text-sm transition-colors ${
+                  teams.length === 0
+                    ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed select-none'
+                    : 'bg-white border-gray-300 focus:ring-1 focus:ring-blue-500 focus:border-blue-500'
+                }`}
+              >
+                <option value="">{teams.length === 0 ? 'No groups found' : '-- None / Select Group --'}</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>{team.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Agent Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs text-gray-500">
+                Agent
+              </label>
+              <select
+                value={assignedAgentId}
+                onChange={(e) => setAssignedAgentId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+              >
+                <option value="">-- / Unassigned</option>
+                {agents.map((ag) => (
+                  <option key={ag.id} value={ag.id}>
+                    {ag.first_name} {ag.last_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Product Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs text-gray-500">
+                Product
+              </label>
+              <select
+                value={product}
+                onChange={(e) => setProduct(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+              >
+                <option value="Example">Example</option>
+                <option value="AIV Analytics">AIV Analytics</option>
+                <option value="AIV Enterprise">AIV Enterprise</option>
               </select>
             </div>
 
@@ -640,11 +878,39 @@ export function AgentCreateTicket() {
               <RichTextEditor
                 value={description}
                 onChange={setDescription}
-                placeholder="Detailed description..."
+                placeholder=""
                 minHeight={250}
                 userId={profile?.id}
                 files={uploadedFiles}
                 onFilesChange={setUploadedFiles}
+              />
+            </div>
+
+            {/* Reference Number Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs text-gray-500">
+                Reference Number
+              </label>
+              <input
+                type="text"
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                placeholder=""
+              />
+            </div>
+
+            {/* Tags Field */}
+            <div className="space-y-1.5">
+              <label className="block text-xs text-gray-500">
+                Tags
+              </label>
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white"
+                placeholder=""
               />
             </div>
 
@@ -658,11 +924,16 @@ export function AgentCreateTicket() {
             {/* Bottom Actions */}
             <div className="flex items-center justify-between pt-6 mt-6 border-t border-gray-100">
               <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input type="checkbox" className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" />
+                <input
+                  type="checkbox"
+                  checked={createAnother}
+                  onChange={(e) => setCreateAnother(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
                 Create another
               </label>
-              
-              <div className="flex gap-3">
+
+              <div className="flex gap-3 items-center">
                 <button
                   type="button"
                   onClick={() => navigate(-1)}
@@ -670,13 +941,22 @@ export function AgentCreateTicket() {
                 >
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-1.5 bg-[#186ade] text-white font-semibold text-sm rounded hover:bg-[#1459be] transition-colors shadow-sm disabled:opacity-50"
-                >
-                  {loading ? 'Creating...' : 'Create'}
-                </button>
+                <div className="inline-flex rounded shadow-sm">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-4 py-1.5 bg-[#186ade] text-white font-semibold text-sm rounded-l hover:bg-[#1459be] transition-colors disabled:opacity-50"
+                  >
+                    {loading ? 'Creating...' : 'Create'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    className="px-2 py-1.5 bg-[#186ade] text-white border-l border-blue-600 rounded-r hover:bg-[#1459be] transition-colors disabled:opacity-50"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -686,7 +966,7 @@ export function AgentCreateTicket() {
 
       {/* RIGHT COLUMN: Side Panel */}
       <div className="w-72 lg:w-80 border-l border-gray-200 bg-[#f9fafb] shrink-0 flex flex-col hidden md:flex h-[calc(100vh-120px)] sticky top-0">
-        
+
         {/* Ticket Templates */}
         <div className="p-4 border-b border-gray-200">
           <button className="flex items-center justify-between w-full text-sm font-semibold text-gray-800 mb-3">
@@ -710,7 +990,7 @@ export function AgentCreateTicket() {
             </div>
             <ChevronDown className="w-4 h-4 text-gray-400" />
           </button>
-          
+
           {(() => {
             const selected = users.find(u => u.id === createdBy);
             if (!selected) {
@@ -736,7 +1016,7 @@ export function AgentCreateTicket() {
                     {selected.first_name} {selected.last_name}
                   </div>
                 </div>
-                
+
                 <div className="space-y-1">
                   <div className="text-[11px] text-gray-500 font-medium">Email</div>
                   <div className="flex items-center gap-2 text-[13px] text-gray-900 font-medium break-all">
@@ -801,8 +1081,8 @@ export function AgentCreateTicket() {
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
               <h2 className="text-xl font-bold text-[#12344d]">Add Contact</h2>
-              <button 
-                onClick={() => setShowAddContact(false)} 
+              <button
+                onClick={() => setShowAddContact(false)}
                 className="absolute -left-10 top-4 w-8 h-8 bg-[#12344d] rounded flex items-center justify-center text-white hover:bg-slate-800 shadow-md"
               >
                 <X className="w-5 h-5" />
@@ -817,13 +1097,13 @@ export function AgentCreateTicket() {
                 <label className="block text-xs font-semibold text-gray-700">Email</label>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 relative">
-                    <input 
-                      type="text" 
-                      placeholder="Enter an email address" 
+                    <input
+                      type="text"
+                      placeholder="Enter an email address"
                       value={newContactEmail}
                       onChange={(e) => setNewContactEmail(e.target.value)}
                       autoComplete="new-contact-email"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                     <button className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-600 hover:text-blue-800">
                       <SettingsIcon className="w-4 h-4" />
@@ -842,13 +1122,13 @@ export function AgentCreateTicket() {
               <div className="relative border-l-2 border-dotted border-gray-200 pl-4 ml-2 space-y-3 pb-2">
                 <div className="absolute -left-[5px] top-0 w-2 h-2 bg-gray-200 rounded-full"></div>
                 <label className="block text-xs font-semibold text-gray-700">Mobile Phone</label>
-                <input 
-                  type="text" 
-                  placeholder="Enter a Mobile Phone" 
+                <input
+                  type="text"
+                  placeholder="Enter a Mobile Phone"
                   value={newContactPhone}
                   onChange={(e) => setNewContactPhone(e.target.value)}
                   autoComplete="off"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
 
@@ -890,13 +1170,13 @@ export function AgentCreateTicket() {
               {(newContactEmail.toLowerCase() === 'sejalprasad36@gmail.com' || newContactPhone === '7575063401') && (
                 <div className="mt-6 pt-4 border-t border-gray-100">
                   <h3 className="text-[13px] font-medium text-gray-500 mb-4">Contact already exists</h3>
-                  
+
                   {/* Duplicate Card 1 */}
                   <div className="mb-4">
                     <p className="text-xs font-semibold text-gray-700 mb-1">Duplicate contact found for the below fields</p>
                     <p className="text-xs text-gray-600 mb-0.5">Email: <span className="font-medium">sejalprasad36@gmail.com</span></p>
                     <p className="text-xs text-gray-600 mb-2">Mobile phone: <span className="font-medium">7575063401</span></p>
-                    
+
                     <div className="bg-white border border-blue-200 rounded-lg p-4 shadow-sm flex gap-4">
                       <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-400 flex items-center justify-center font-semibold text-lg shrink-0">
                         S
@@ -920,7 +1200,7 @@ export function AgentCreateTicket() {
                     <p className="text-xs font-semibold text-gray-700 mb-1">Duplicate contact found for the below fields</p>
                     <p className="text-xs text-gray-600 mb-0.5">Email: <span className="font-medium">sejalprasad36@gmail.com</span></p>
                     <p className="text-xs text-gray-600 mb-2">Mobile phone: <span className="font-medium">7575063401</span></p>
-                    
+
                     <div className="bg-white border border-blue-200 rounded-lg p-4 shadow-sm flex gap-4">
                       <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-400 flex items-center justify-center font-semibold text-lg shrink-0">
                         S
@@ -959,13 +1239,13 @@ export function AgentCreateTicket() {
               {/* Full Name */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-gray-700">Full Name</label>
-                <input 
-                  type="text" 
-                  placeholder="Enter a Full Name" 
+                <input
+                  type="text"
+                  placeholder="Enter a Full Name"
                   value={newContactFirst}
                   onChange={(e) => setNewContactFirst(e.target.value)}
                   autoComplete="new-contact-name"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500" 
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
 
