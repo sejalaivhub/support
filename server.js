@@ -43,12 +43,12 @@ pool.connect((err, client, release) => {
   }
 });
 
-// Helper: Run setup_database.sql
+// Helper: Run database schema setup
 app.post('/api/setup-database', async (req, res) => {
   try {
-    const sqlPath = path.join(__dirname, 'supabase', 'setup_database.sql');
+    const sqlPath = path.join(__dirname, 'backend', 'schema.sql');
     if (!fs.existsSync(sqlPath)) {
-      return res.status(404).json({ error: 'setup_database.sql not found' });
+      return res.status(404).json({ error: 'backend/schema.sql not found' });
     }
     const sql = fs.readFileSync(sqlPath, 'utf8');
     await pool.query(sql);
@@ -156,7 +156,7 @@ app.post('/auth/v1/logout', (req, res) => {
   res.status(200).json({});
 });
 
-// --- PostgREST Compatibility Layer for Supabase-js Client ---
+// --- PostgREST Compatibility Layer for PostgreSQL-js Client ---
 
 // Parser helper for PostgREST query parameters
 function parseFilters(query) {
@@ -300,10 +300,69 @@ app.post('/rest/v1/:table', async (req, res) => {
     const insertedRows = [];
 
     for (const record of records) {
-      // Auto-generate ticket_number if inserting into tickets
-      if (table === 'tickets' && !record.ticket_number) {
-        const nextNum = Math.floor(100000 + Math.random() * 900000);
-        record.ticket_number = `AIV-${nextNum}`;
+      // Auto-generate ticket_number and auto-assign if inserting into tickets
+      if (table === 'tickets') {
+        if (!record.ticket_number) {
+          const nextNum = Math.floor(100000 + Math.random() * 900000);
+          record.ticket_number = `AIV-${nextNum}`;
+        }
+
+        // Automatic Routing & Least-Loaded Agent Assignment
+        if (!record.assigned_agent_id) {
+          try {
+            // 1. Resolve default support team if not provided
+            if (!record.assigned_team_id && record.account_id) {
+              const accTeamRes = await pool.query('SELECT support_team_id FROM public.accounts WHERE id = $1', [record.account_id]);
+              if (accTeamRes.rows[0]?.support_team_id) {
+                record.assigned_team_id = accTeamRes.rows[0].support_team_id;
+              }
+            }
+
+            // If still no team, pick the first active support team
+            if (!record.assigned_team_id) {
+              const defaultTeamRes = await pool.query('SELECT id FROM public.support_teams WHERE is_active = true ORDER BY name LIMIT 1');
+              if (defaultTeamRes.rows[0]?.id) {
+                record.assigned_team_id = defaultTeamRes.rows[0].id;
+              }
+            }
+
+            // 2. Find eligible active agents in the assigned team (or any active agent if none in team)
+            let agentRes;
+            if (record.assigned_team_id) {
+              agentRes = await pool.query(
+                `SELECT p.id, COUNT(t.id) AS open_tickets_count
+                 FROM public.profiles p
+                 JOIN public.support_team_members stm ON stm.agent_id = p.id
+                 LEFT JOIN public.tickets t ON t.assigned_agent_id = p.id AND t.status NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')
+                 WHERE stm.team_id = $1 AND p.user_type IN ('agent', 'manager') AND p.status = 'active'
+                 GROUP BY p.id
+                 ORDER BY open_tickets_count ASC, p.first_name ASC
+                 LIMIT 1`,
+                [record.assigned_team_id]
+              );
+            }
+
+            // Fallback: Pick any active agent/manager with lowest open ticket workload
+            if (!agentRes || agentRes.rows.length === 0) {
+              agentRes = await pool.query(
+                `SELECT p.id, COUNT(t.id) AS open_tickets_count
+                 FROM public.profiles p
+                 LEFT JOIN public.tickets t ON t.assigned_agent_id = p.id AND t.status NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED')
+                 WHERE p.user_type IN ('agent', 'manager', 'admin') AND p.status = 'active'
+                 GROUP BY p.id
+                 ORDER BY open_tickets_count ASC, p.first_name ASC
+                 LIMIT 1`
+              );
+            }
+
+            if (agentRes.rows.length > 0) {
+              record.assigned_agent_id = agentRes.rows[0].id;
+              console.log(`[AUTO-ASSIGNMENT] Assigned ${record.ticket_number} to Agent: ${record.assigned_agent_id} (Team: ${record.assigned_team_id || 'Global'})`);
+            }
+          } catch (assignErr) {
+            console.warn('[AUTO-ASSIGNMENT ERROR]:', assignErr.message);
+          }
+        }
       }
 
       // UUID format regex
@@ -326,10 +385,24 @@ app.post('/rest/v1/:table', async (req, res) => {
 
       const sql = `INSERT INTO public."${table}" (${cols}) VALUES (${placeholders}) RETURNING *`;
       const result = await pool.query(sql, values);
-      insertedRows.push(result.rows[0]);
+      const inserted = result.rows[0];
+      insertedRows.push(inserted);
+
+      // If a ticket was inserted with an assigned agent, log to ticket_assignment_history
+      if (table === 'tickets' && inserted.assigned_agent_id) {
+        try {
+          await pool.query(
+            `INSERT INTO public.ticket_assignment_history (ticket_id, to_agent_id, to_team_id, changed_by_user_id)
+             VALUES ($1, $2, $3, $4)`,
+            [inserted.id, inserted.assigned_agent_id, inserted.assigned_team_id, inserted.created_by_user_id]
+          );
+        } catch (histErr) {
+          console.warn('[ASSIGNMENT HISTORY ERROR]:', histErr.message);
+        }
+      }
     }
 
-    // Supabase single() returns single object if not array
+    // PostgreSQL single() returns single object if not array
     if (!Array.isArray(payload)) {
       return res.status(201).json(insertedRows[0]);
     }
@@ -389,5 +462,5 @@ app.delete('/rest/v1/:table', async (req, res) => {
 // Start Express server
 app.listen(PORT, () => {
   console.log(`\n🚀 Local PostgreSQL API bridge running on http://localhost:${PORT}`);
-  console.log(`📡 Point VITE_SUPABASE_URL=http://localhost:${PORT} in your .env\n`);
+  console.log(`📡 Point VITE_POSTGRES_URL=http://localhost:${PORT} in your .env\n`);
 });

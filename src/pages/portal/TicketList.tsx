@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, Spinner, EmptyState, Button, Input, Select } from '@/components/ui';
 import { PriorityBadge, StatusBadge } from '@/components/ui/Badges';
@@ -37,14 +37,14 @@ export function TicketList() {
     }
 
     try {
-      let query = supabase
+      let query = dbClient
         .from('tickets')
         .select('*')
         .eq('account_id', profile.account_id)
         .order('created_at', { ascending: false });
 
       if (profile.user_type === 'customer_user') {
-        const { data: account } = await supabase
+        const { data: account } = await dbClient
           .from('accounts')
           .select('customer_ticket_visibility')
           .eq('id', profile.account_id)

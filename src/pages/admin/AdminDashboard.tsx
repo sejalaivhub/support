@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { fullName } from '@/lib/constants';
 import type { TicketWithRelations } from '@/types';
@@ -80,29 +80,29 @@ export function AdminDashboard() {
 
   const [hoveredHour, setHoveredHour] = useState<number | null>(null);
 
-  // Fetch real stats from Supabase
+  // Fetch real stats from PostgreSQL
   const fetchStats = useCallback(async () => {
     try {
       // Unresolved tickets (Open, Pending)
-      const { count: unresolvedCount } = await supabase
+      const { count: unresolvedCount } = await dbClient
         .from('tickets')
         .select('*', { count: 'exact', head: true })
         .in('status', ['Open', 'Pending']);
 
       // Open tickets
-      const { count: openCount } = await supabase
+      const { count: openCount } = await dbClient
         .from('tickets')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'Open');
 
       // Unassigned tickets
-      const { count: unassignedCount } = await supabase
+      const { count: unassignedCount } = await dbClient
         .from('tickets')
         .select('*', { count: 'exact', head: true })
         .is('assigned_to', null);
 
       // Resolved tickets
-      const { count: resolvedCount } = await supabase
+      const { count: resolvedCount } = await dbClient
         .from('tickets')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'Resolved');
@@ -165,7 +165,7 @@ export function AdminDashboard() {
     }
     setIsSearching(true);
     try {
-      const { data } = await supabase
+      const { data } = await dbClient
         .from('tickets')
         .select('id, ticket_number, subject, status, priority')
         .or(`subject.ilike.%${query}%,ticket_number.ilike.%${query}%`)

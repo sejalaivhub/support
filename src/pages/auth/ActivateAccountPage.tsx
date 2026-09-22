@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Card, CardBody, Button, Input, Spinner } from '@/components/ui';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import {
   CheckCircle2, Lock, ShieldCheck, UserCheck, AlertCircle, ArrowRight, Sparkles, Building2
 } from 'lucide-react';
@@ -32,7 +32,7 @@ export function ActivateAccountPage() {
   });
 
   useEffect(() => {
-    // Attempt to load full user details from local storage or Supabase if available
+    // Attempt to load full user details from local storage or PostgreSQL if available
     try {
       const customUsers = JSON.parse(localStorage.getItem('local_custom_users') || '[]');
       const found = customUsers.find((u: any) => u.id === userId || u.email === emailParam);
@@ -89,9 +89,9 @@ export function ActivateAccountPage() {
       }
       localStorage.setItem('local_custom_users', JSON.stringify(customUsers));
 
-      // 2. Try Supabase update
+      // 2. Try PostgreSQL update
       try {
-        await supabase.from('profiles').update({
+        await dbClient.from('profiles').update({
           status: 'active',
           job_title: jobTitle.trim() || null,
           phone: phone.trim() || null,

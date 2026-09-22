@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardBody, CardHeader, Spinner, Button, EmptyState, Select } from '@/components/ui';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
@@ -189,7 +189,7 @@ export function TicketDetail() {
 
     let ticketData: Ticket | null = null;
     try {
-      let query = supabase.from('tickets').select('*');
+      let query = dbClient.from('tickets').select('*');
       if (ticketId.startsWith('AIV-')) {
         query = query.eq('ticket_number', ticketId);
       } else {
@@ -219,7 +219,7 @@ export function TicketDetail() {
     setNewTeam(ticketData.assigned_team_id || '');
 
     try {
-      const { data: msgData } = await supabase
+      const { data: msgData } = await dbClient
         .from('ticket_messages')
         .select('*, author:profiles(*)')
         .eq('ticket_id', ticketData.id)
@@ -268,7 +268,7 @@ export function TicketDetail() {
     }
 
     try {
-      const { data: attachData } = await supabase
+      const { data: attachData } = await dbClient
         .from('ticket_attachments')
         .select('*')
         .eq('ticket_id', ticketData.id);
@@ -276,7 +276,7 @@ export function TicketDetail() {
         const map: Record<string, Attachment[]> = {};
         const publicUrlMap: Record<string, string> = {};
         for (const a of attachData) {
-          const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(a.storage_path);
+          const { data: urlData } = dbClient.storage.from('attachments').getPublicUrl(a.storage_path);
           publicUrlMap[a.storage_path] = urlData.publicUrl;
         }
         for (const a of attachData) {
@@ -292,7 +292,7 @@ export function TicketDetail() {
     } catch (e) {}
 
     try {
-      const { data: slaData } = await supabase
+      const { data: slaData } = await dbClient
         .from('ticket_sla_snapshots')
         .select('*')
         .eq('ticket_id', ticketData.id)
@@ -303,7 +303,7 @@ export function TicketDetail() {
     } catch (e) {}
 
     try {
-      const { data: histData } = await supabase
+      const { data: histData } = await dbClient
         .from('ticket_status_history')
         .select('*')
         .eq('ticket_id', ticketData.id)
@@ -317,20 +317,20 @@ export function TicketDetail() {
 
     if (userIds.size > 0) {
       try {
-        const { data: profileData } = await supabase
+        const { data: profileData } = await dbClient
           .from('profiles')
           .select('*')
           .in('id', Array.from(userIds));
         if (profileData) {
           const map: Record<string, Profile> = {};
-          profileData.forEach((p) => { map[p.id] = p as Profile; });
+          (profileData as any[]).forEach((p: any) => { map[p.id] = p as Profile; });
           setProfiles(map);
         }
       } catch (e) {}
     }
 
     try {
-      const { data: teamData } = await supabase.from('support_teams').select('*').eq('is_active', true).order('name');
+      const { data: teamData } = await dbClient.from('support_teams').select('*').eq('is_active', true).order('name');
       if (teamData) setTeams(teamData as SupportTeam[]);
     } catch (e) {}
 
@@ -368,7 +368,7 @@ export function TicketDetail() {
     setReplyFiles([]);
 
     try {
-      await supabase
+      await dbClient
         .from('ticket_messages')
         .insert({
           ticket_id: ticket.id,
@@ -382,8 +382,8 @@ export function TicketDetail() {
 
     if (isCustomer && ticket) {
       if (ticket.status === 'WAITING_FOR_CUSTOMER') {
-        await supabase.from('tickets').update({ status: 'OPEN', updated_at: new Date().toISOString() }).eq('id', ticket.id);
-        await supabase.from('ticket_status_history').insert({
+        await dbClient.from('tickets').update({ status: 'OPEN', updated_at: new Date().toISOString() }).eq('id', ticket.id);
+        await dbClient.from('ticket_status_history').insert({
           ticket_id: ticket.id,
           from_status: ticket.status,
           to_status: 'OPEN',
@@ -406,11 +406,11 @@ export function TicketDetail() {
 
     if (isStaff && !isInternal && ticket) {
       if (!ticket.first_human_response_at) {
-        await supabase.from('tickets').update({
+        await dbClient.from('tickets').update({
           first_human_response_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }).eq('id', ticket.id);
-        await supabase.from('ticket_sla_events').insert({
+        await dbClient.from('ticket_sla_events').insert({
           ticket_id: ticket.id,
           event_type: 'FIRST_HUMAN_RESPONSE',
           actor_user_id: profile.id,
@@ -439,14 +439,14 @@ export function TicketDetail() {
 
   const handleStatusChange = async () => {
     if (!ticket || !profile || newStatus === ticket.status) return;
-    await supabase.from('tickets').update({
+    await dbClient.from('tickets').update({
       status: newStatus,
       resolved_at: newStatus === 'RESOLVED' ? new Date().toISOString() : ticket.resolved_at,
       closed_at: newStatus === 'CLOSED' ? new Date().toISOString() : ticket.closed_at,
       updated_at: new Date().toISOString(),
     }).eq('id', ticket.id);
 
-    await supabase.from('ticket_status_history').insert({
+    await dbClient.from('ticket_status_history').insert({
       ticket_id: ticket.id,
       from_status: ticket.status,
       to_status: newStatus,
@@ -454,7 +454,7 @@ export function TicketDetail() {
     });
 
     if (newStatus === 'RESOLVED') {
-      await supabase.from('ticket_sla_events').insert({
+      await dbClient.from('ticket_sla_events').insert({
         ticket_id: ticket.id,
         event_type: 'RESOLVED',
         actor_user_id: profile.id,
@@ -480,7 +480,7 @@ export function TicketDetail() {
 
   const handlePriorityChange = async () => {
     if (!ticket || !profile || newPriority === ticket.priority) return;
-    await supabase.from('tickets').update({
+    await dbClient.from('tickets').update({
       priority: newPriority,
       customer_priority: newPriority,
       updated_at: new Date().toISOString(),
@@ -490,7 +490,7 @@ export function TicketDetail() {
 
   const handleAivPriorityChange = async () => {
     if (!ticket || !profile || newAivPriority === (ticket.aiv_priority || ticket.priority)) return;
-    await supabase.from('tickets').update({
+    await dbClient.from('tickets').update({
       aiv_priority: newAivPriority,
       priority: newAivPriority,
       updated_at: new Date().toISOString(),
@@ -504,9 +504,9 @@ export function TicketDetail() {
     if (newTeam !== (ticket.assigned_team_id || '')) updates.assigned_team_id = newTeam || null;
     if (newAgent !== (ticket.assigned_agent_id || '')) updates.assigned_agent_id = newAgent || null;
 
-    await supabase.from('tickets').update(updates).eq('id', ticket.id);
+    await dbClient.from('tickets').update(updates).eq('id', ticket.id);
 
-    await supabase.from('ticket_assignment_history').insert({
+    await dbClient.from('ticket_assignment_history').insert({
       ticket_id: ticket.id,
       from_agent_id: ticket.assigned_agent_id,
       to_agent_id: newAgent || null,
@@ -696,8 +696,8 @@ export function TicketDetail() {
               <div className="border-t border-gray-100 p-4 flex items-center justify-between">
                 <p className="text-sm text-gray-500">Is this not resolved? You can reopen this ticket.</p>
                 <Button variant="outline" onClick={async () => {
-                  await supabase.from('tickets').update({ status: 'OPEN', resolved_at: null, updated_at: new Date().toISOString() }).eq('id', ticket.id);
-                  await supabase.from('ticket_status_history').insert({
+                  await dbClient.from('tickets').update({ status: 'OPEN', resolved_at: null, updated_at: new Date().toISOString() }).eq('id', ticket.id);
+                  await dbClient.from('ticket_status_history').insert({
                     ticket_id: ticket.id, from_status: 'RESOLVED', to_status: 'OPEN',
                     changed_by_user_id: profile.id, reason: 'Customer reopened ticket',
                   });

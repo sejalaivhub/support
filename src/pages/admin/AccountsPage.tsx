@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, Spinner, EmptyState, Button, Input, Select, Modal } from '@/components/ui';
 import { Badge } from '@/components/ui/Badges';
 import type { Account, SupportPlan, SupportTeam } from '@/types';
@@ -48,7 +48,7 @@ export function AccountsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await supabase
+      const { data } = await dbClient
         .from('accounts')
         .select('*, support_plans(name, code)')
         .order('company_name');
@@ -56,12 +56,12 @@ export function AccountsPage() {
     } catch (e) {}
 
     try {
-      const { data: planData } = await supabase.from('support_plans').select('*').eq('active', true).order('sort_order');
+      const { data: planData } = await dbClient.from('support_plans').select('*').eq('active', true).order('sort_order');
       if (planData && planData.length > 0) setPlans(planData as SupportPlan[]);
     } catch (e) {}
 
     try {
-      const { data: teamData } = await supabase.from('support_teams').select('*').eq('is_active', true).order('name');
+      const { data: teamData } = await dbClient.from('support_teams').select('*').eq('is_active', true).order('name');
       if (teamData && teamData.length > 0) setTeams(teamData as SupportTeam[]);
     } catch (e) {}
 
@@ -139,9 +139,9 @@ export function AccountsPage() {
 
     try {
       if (editing) {
-        await supabase.from('accounts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
+        await dbClient.from('accounts').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
       } else {
-        await supabase.from('accounts').insert(payload);
+        await dbClient.from('accounts').insert(payload);
       }
     } catch (err) {
       // ignore offline/fetch errors

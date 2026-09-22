@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, Spinner, EmptyState, Button, Input, Select, Modal } from '@/components/ui';
 import { Avatar, Badge } from '@/components/ui/Badges';
 import { fullName } from '@/lib/constants';
@@ -58,7 +58,7 @@ export function UsersPage() {
     let fetchedUsers: (Profile & { accounts?: { company_name: string } })[] = [];
 
     try {
-      const { data } = await supabase
+      const { data } = await dbClient
         .from('profiles')
         .select('*, accounts(company_name)')
         .order('created_at', { ascending: false });
@@ -87,7 +87,7 @@ export function UsersPage() {
 
     // Load Accounts dropdown
     try {
-      const { data: acctData } = await supabase.from('accounts').select('*').eq('status', 'ACTIVE').order('company_name');
+      const { data: acctData } = await dbClient.from('accounts').select('*').eq('status', 'ACTIVE').order('company_name');
       if (acctData && acctData.length > 0) {
         setAccounts(acctData as Account[]);
       } else {
@@ -175,7 +175,7 @@ export function UsersPage() {
       } catch (e) {}
     }
 
-    // Try Supabase insert/update
+    // Try PostgreSQL insert/update
     try {
       const payload = {
         first_name: form.first_name.trim(),
@@ -189,9 +189,9 @@ export function UsersPage() {
       };
 
       if (editing) {
-        await supabase.from('profiles').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
+        await dbClient.from('profiles').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
       } else {
-        await supabase.from('profiles').insert({ id: newUser.id, ...payload });
+        await dbClient.from('profiles').insert({ id: newUser.id, ...payload });
 
         // Dispatch Account Activation Invitation Email
         sendAccountActivationEmail({
@@ -228,7 +228,7 @@ export function UsersPage() {
     } catch (e) {}
 
     try {
-      await supabase.from('profiles').delete().eq('id', id);
+      await dbClient.from('profiles').delete().eq('id', id);
     } catch (e) {}
   };
 

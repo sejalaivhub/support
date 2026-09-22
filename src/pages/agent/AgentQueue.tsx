@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, Spinner, EmptyState, Button } from '@/components/ui';
 import { PriorityBadge, StatusBadge } from '@/components/ui/Badges';
@@ -24,7 +24,7 @@ export function AgentQueue() {
     if (!profile?.id) return;
     setLoading(true);
 
-    let query = supabase
+    let query = dbClient
       .from('tickets')
       .select(`
         *,
@@ -51,16 +51,16 @@ export function AgentQueue() {
     const { data } = await query;
     if (data) {
       setTickets(data as unknown as TicketWithRelations[]);
-      const ids = data.map((t) => t.id);
+      const ids = (data as any[]).map((t: any) => t.id);
       if (ids.length > 0) {
-        const { data: slaData } = await supabase
+        const { data: slaData } = await dbClient
           .from('ticket_sla_snapshots')
           .select('*')
           .in('ticket_id', ids)
           .order('created_at', { ascending: false });
         if (slaData) {
           const map: Record<string, TicketSlaSnapshot> = {};
-          slaData.forEach((s) => { if (!map[s.ticket_id]) map[s.ticket_id] = s as TicketSlaSnapshot; });
+          (slaData as any[]).forEach((s: any) => { if (!map[s.ticket_id]) map[s.ticket_id] = s as TicketSlaSnapshot; });
           setSlaSnapshots(map);
         }
       }

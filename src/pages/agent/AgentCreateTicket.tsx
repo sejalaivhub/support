@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select } from '@/components/ui';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
@@ -106,9 +106,9 @@ export function AgentCreateTicket() {
         localStorage.setItem('local_custom_users', JSON.stringify(updatedCustom));
       } catch (err) {}
 
-      // 2. Persist to PostgreSQL via API/Supabase bridge
+      // 2. Persist to PostgreSQL via API/PostgreSQL bridge
       try {
-        await supabase.from('profiles').insert({
+        await dbClient.from('profiles').insert({
           id: newProfile.id,
           email: newProfile.email,
           auth_uid: null,
@@ -168,7 +168,7 @@ export function AgentCreateTicket() {
     } catch (e) {}
 
     try {
-      let query = supabase.from('profiles').select('*').eq('status', 'active').order('first_name');
+      let query = dbClient.from('profiles').select('*').eq('status', 'active').order('first_name');
       if (filterAccountId) {
         query = query.eq('account_id', filterAccountId);
       }
@@ -208,13 +208,13 @@ export function AgentCreateTicket() {
       customAccounts = JSON.parse(localStorage.getItem('local_custom_accounts') || '[]');
     } catch (e) {}
 
-    supabase.from('ticket_types').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
+    dbClient.from('ticket_types').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
       if (data && data.length > 0) setTypes(data as TicketType[]);
     });
-    supabase.from('ticket_categories').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
+    dbClient.from('ticket_categories').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
       if (data && data.length > 0) setCategories(data as TicketCategory[]);
     });
-    supabase.from('accounts').select('*').eq('status', 'ACTIVE').order('company_name').then(({ data }) => {
+    dbClient.from('accounts').select('*').eq('status', 'ACTIVE').order('company_name').then(({ data }) => {
       if (data && data.length > 0) {
         setAccounts([...customAccounts, ...(data as Account[])]);
       } else {
@@ -264,7 +264,7 @@ export function AgentCreateTicket() {
     let dbSuccess = false;
 
     try {
-      const { data: ticket, error } = await supabase.from('tickets').insert({
+      const { data: ticket, error } = await dbClient.from('tickets').insert({
         account_id: accountId,
         created_by_user_id: createdBy,
         ticket_type_id: ticketType || null,
@@ -299,7 +299,7 @@ export function AgentCreateTicket() {
           console.warn('Could not send email acknowledgement:', e);
         }
 
-        const { data: msgData } = await supabase.from('ticket_messages').insert({
+        const { data: msgData } = await dbClient.from('ticket_messages').insert({
           ticket_id: ticket.id,
           author_user_id: createdBy,
           message_type: 'customer_message',
@@ -309,7 +309,7 @@ export function AgentCreateTicket() {
 
         if (msgData && uploadedFiles.length > 0) {
           for (const file of uploadedFiles) {
-            await supabase.from('ticket_attachments').insert({
+            await dbClient.from('ticket_attachments').insert({
               ticket_id: ticket.id,
               message_id: msgData.id,
               uploaded_by_user_id: profile.id,
@@ -322,7 +322,7 @@ export function AgentCreateTicket() {
           }
         }
 
-        await supabase.from('ticket_status_history').insert({
+        await dbClient.from('ticket_status_history').insert({
           ticket_id: ticket.id,
           from_status: null,
           to_status: 'OPEN',
@@ -331,7 +331,7 @@ export function AgentCreateTicket() {
         });
 
         if (selectedAcct?.support_plan_id) {
-          const { data: sla } = await supabase
+          const { data: sla } = await dbClient
             .from('sla_policies')
             .select('*, support_plans(code)')
             .eq('support_plan_id', selectedAcct.support_plan_id)
@@ -341,7 +341,7 @@ export function AgentCreateTicket() {
 
           if (sla) {
             const planCode = (sla as any).support_plans?.code || 'STANDARD';
-            await supabase.from('ticket_sla_snapshots').insert({
+            await dbClient.from('ticket_sla_snapshots').insert({
               ticket_id: ticket.id,
               support_plan_code: planCode,
               sla_policy_id: sla.id,
@@ -356,7 +356,7 @@ export function AgentCreateTicket() {
               first_response_due_at: new Date(Date.now() + sla.first_response_target_minutes * 60000).toISOString(),
               resolution_due_at: new Date(Date.now() + sla.resolution_target_minutes * 60000).toISOString(),
             });
-            await supabase.from('ticket_sla_events').insert({
+            await dbClient.from('ticket_sla_events').insert({
               ticket_id: ticket.id,
               event_type: 'START',
               actor_user_id: profile.id,

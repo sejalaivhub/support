@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardBody, Button, Input, Select } from '@/components/ui';
 import { RichTextEditor } from '@/components/ui/RichTextEditor';
@@ -76,10 +76,10 @@ export function CreateTicket() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
 
   useEffect(() => {
-    supabase.from('ticket_types').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
+    dbClient.from('ticket_types').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
       if (data && data.length > 0) setTypes(data as TicketType[]);
     });
-    supabase.from('ticket_categories').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
+    dbClient.from('ticket_categories').select('*').eq('is_active', true).order('sort_order').then(({ data }) => {
       if (data && data.length > 0) setCategories(data as TicketCategory[]);
     });
   }, []);
@@ -99,7 +99,7 @@ export function CreateTicket() {
 
     let dbTicket: any;
     try {
-      const { data, error } = await supabase.from('tickets').insert({
+      const { data, error } = await dbClient.from('tickets').insert({
         account_id: activeAccountId,
         created_by_user_id: profile?.id,
         ticket_type_id: ticketType || null,
@@ -178,7 +178,7 @@ export function CreateTicket() {
     }
 
     try {
-      const { data: msgData } = await supabase.from('ticket_messages').insert({
+      const { data: msgData } = await dbClient.from('ticket_messages').insert({
         ticket_id: dbTicket.id,
         author_user_id: profile?.id,
         message_type: 'customer_message',
@@ -188,7 +188,7 @@ export function CreateTicket() {
 
       if (msgData && uploadedFiles.length > 0) {
         for (const file of uploadedFiles) {
-          await supabase.from('ticket_attachments').insert({
+          await dbClient.from('ticket_attachments').insert({
             ticket_id: dbTicket.id,
             message_id: msgData.id,
             uploaded_by_user_id: profile?.id,
@@ -201,7 +201,7 @@ export function CreateTicket() {
         }
       }
 
-      await supabase.from('ticket_status_history').insert({
+      await dbClient.from('ticket_status_history').insert({
         ticket_id: dbTicket.id,
         from_status: null,
         to_status: 'NEW',

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, CardBody, CardHeader, Spinner, Button, Input, Modal, EmptyState } from '@/components/ui';
 import { Badge } from '@/components/ui/Badges';
 import type { BusinessCalendar, BusinessCalendarHour, HolidayDate } from '@/types';
@@ -15,12 +15,12 @@ export function CalendarsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: calData } = await supabase.from('business_calendars').select('*').order('name');
+    const { data: calData } = await dbClient.from('business_calendars').select('*').order('name');
     if (calData) {
       const withDetails = await Promise.all(
         (calData as BusinessCalendar[]).map(async (cal) => {
-          const { data: hours } = await supabase.from('business_calendar_hours').select('*').eq('calendar_id', cal.id).order('day_of_week');
-          const { data: holidays } = await supabase.from('holiday_dates').select('*').eq('calendar_id', cal.id).order('holiday_date');
+          const { data: hours } = await dbClient.from('business_calendar_hours').select('*').eq('calendar_id', cal.id).order('day_of_week');
+          const { data: holidays } = await dbClient.from('holiday_dates').select('*').eq('calendar_id', cal.id).order('holiday_date');
           return { ...cal, hours: hours || [], holidays: holidays || [] };
         })
       );
@@ -32,7 +32,7 @@ export function CalendarsPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleSave = async () => {
-    await supabase.from('business_calendars').insert({ name: form.name, timezone: form.timezone, description: form.description || null, is_active: true });
+    await dbClient.from('business_calendars').insert({ name: form.name, timezone: form.timezone, description: form.description || null, is_active: true });
     setShowModal(false);
     setForm({ name: '', timezone: 'UTC', description: '' });
     load();

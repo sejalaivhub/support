@@ -1,6 +1,6 @@
 # AIV Support Portal
 
-A full-featured customer support ticket management system built with React, TypeScript, Vite, and Supabase.
+A full-featured customer support ticket management system built with React, TypeScript, Vite, and PostgreSQL.
 
 ## Features
 
@@ -18,12 +18,12 @@ A full-featured customer support ticket management system built with React, Type
 
 - [Node.js](https://nodejs.org/) v18 or later
 - npm (comes with Node.js)
-- **Option A:** A [Supabase](https://supabase.com/) cloud project (free tier works)
-- **Option B:** [Docker](https://www.docker.com/) installed (for local PostgreSQL via Supabase CLI)
+- **Option A:** A [PostgreSQL](https://dbClient.com/) cloud project (free tier works)
+- **Option B:** [Docker](https://www.docker.com/) installed (for local PostgreSQL via PostgreSQL CLI)
 
 ---
 
-## Local Setup (Option A — Supabase Cloud)
+## Local Setup (Option A — PostgreSQL Cloud)
 
 ### 1. Clone the repository
 
@@ -40,18 +40,18 @@ npm install
 
 ### 3. Configure environment variables
 
-Create a `.env` file in the project root with your Supabase credentials:
+Create a `.env` file in the project root with your PostgreSQL credentials:
 
 ```env
-VITE_SUPABASE_URL=https://your-project-id.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
+VITE_POSTGRES_URL=https://your-project-id.dbClient.co
+VITE_POSTGRES_ANON_KEY=your-anon-key-here
 ```
 
-You can find these values in your Supabase project dashboard under **Settings > API**.
+You can find these values in your PostgreSQL project dashboard under **Settings > API**.
 
 ### 4. Apply database migrations
 
-Run the SQL migration files (located in `supabase/migrations/`) against your Supabase database in order. You can do this via the Supabase Dashboard SQL Editor:
+Run the SQL migration files (located in `dbClient/migrations/`) against your PostgreSQL database in order. You can do this via the PostgreSQL Dashboard SQL Editor:
 
 1. `001_foundation_tables.sql` — profiles, accounts, support plans, teams, categories
 2. `002_ticketing_tables.sql` — tickets, messages, attachments, SLA tables, audit logs
@@ -75,7 +75,7 @@ The app will be available at `http://localhost:5173`.
 
 ---
 
-## Local Setup (Option B — Local PostgreSQL without Supabase)
+## Local Setup (Option B — Local PostgreSQL without PostgreSQL)
 
 This option uses a standalone PostgreSQL server on your machine. You apply the same migration SQL files directly.
 
@@ -109,7 +109,7 @@ psql -U postgres -c "CREATE DATABASE aiv_support;"
 
 ### 3. Create the `auth` schema stub
 
-The migrations reference Supabase's `auth.uid()` function for row-level security. To satisfy those references on plain PostgreSQL, create a minimal stub:
+The migrations reference PostgreSQL's `auth.uid()` function for row-level security. To satisfy those references on plain PostgreSQL, create a minimal stub:
 
 ```bash
 psql -U postgres -d aiv_support -c "
@@ -131,7 +131,7 @@ LANGUAGE sql STABLE AS \$\$
 Run all migration files in order:
 
 ```bash
-for file in supabase/migrations/*.sql; do
+for file in dbClient/migrations/*.sql; do
   psql -U postgres -d aiv_support -f "$file"
 done
 ```
@@ -139,17 +139,17 @@ done
 Or apply them one by one if you prefer:
 
 ```bash
-psql -U postgres -d aiv_support -f supabase/migrations/20260820101034_001_foundation_tables.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260820101113_002_ticketing_tables.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260820101134_003_ticket_sequence_and_sla.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260820101345_004_seed_data.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260820103347_005_fix_profile_creation.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260820103506_006_fix_profile_select.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260824093133_007_storage_policies.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260824094424_008_fix_helper_functions_auth_uid.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260824094924_009_add_profiles_fk.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260824095414_010_add_dual_priority_columns.sql
-psql -U postgres -d aiv_support -f supabase/migrations/20260824100045_011_add_accounts_fk_constraints.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260820101034_001_foundation_tables.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260820101113_002_ticketing_tables.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260820101134_003_ticket_sequence_and_sla.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260820101345_004_seed_data.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260820103347_005_fix_profile_creation.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260820103506_006_fix_profile_select.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260824093133_007_storage_policies.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260824094424_008_fix_helper_functions_auth_uid.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260824094924_009_add_profiles_fk.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260824095414_010_add_dual_priority_columns.sql
+psql -U postgres -d aiv_support -f dbClient/migrations/20260824100045_011_add_accounts_fk_constraints.sql
 ```
 
 ### 5. Verify the schema
@@ -174,7 +174,7 @@ Password: postgres
 
 ### 7. Notes on running the frontend app
 
-The frontend app connects to a Supabase-hosted API (PostgREST + GoTrue) rather than directly to PostgreSQL. To run the full app locally against your PostgreSQL database, you would need to also run PostgREST and GoTrue locally — the simplest way to do that is via `docker compose` with the official Supabase self-hosted images.
+The frontend app connects to a PostgreSQL-hosted API (PostgREST + GoTrue) rather than directly to PostgreSQL. To run the full app locally against your PostgreSQL database, you would need to also run PostgREST and GoTrue locally — the simplest way to do that is via `docker compose` with the official PostgreSQL self-hosted images.
 
 For database schema inspection, data seeding, writing backend scripts, or preparing for a self-hosted deployment, the steps above are all you need.
 
@@ -200,7 +200,7 @@ src/
 │   ├── layout/         # App shell, sidebar, navigation
 │   └── ui/             # Reusable UI components (Button, Card, Modal, etc.)
 ├── contexts/           # React context providers (Auth)
-├── lib/                # Supabase client, constants, utilities
+├── lib/                # PostgreSQL client, constants, utilities
 ├── pages/
 │   ├── admin/          # Admin panel pages
 │   ├── agent/          # Agent dashboard and queue
@@ -233,7 +233,7 @@ Additional test users are created by the seed data — check `004_seed_data.sql`
 - **Styling** — Tailwind CSS
 - **Routing** — React Router v7
 - **Icons** — Lucide React
-- **Backend** — Supabase (PostgreSQL, Auth, Storage, RLS)
+- **Backend** — PostgreSQL (PostgreSQL, Auth, Storage, RLS)
 
 ---
 
@@ -245,4 +245,4 @@ Build the production bundle:
 npm run build
 ```
 
-The output is in the `dist/` folder, ready to deploy to any static hosting provider (Netlify, Vercel, Cloudflare Pages, etc.). Make sure your hosting environment has the `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` environment variables set.
+The output is in the `dist/` folder, ready to deploy to any static hosting provider (Netlify, Vercel, Cloudflare Pages, etc.). Make sure your hosting environment has the `VITE_POSTGRES_URL` and `VITE_POSTGRES_ANON_KEY` environment variables set.

@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
-import type { Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { dbClient, isDatabaseConnected, type Session } from '@/lib/dbClient';
 import type { Profile } from '@/types';
 
 interface AuthContextValue {
@@ -137,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const attemptFetch = async (): Promise<Profile | null> => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await dbClient
           .from('profiles')
           .select('*')
           .eq('auth_uid', session.user.id)
@@ -145,7 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (error) return null;
         if (data) return data as Profile;
 
-        const { data: emailProfile } = await supabase
+        const { data: emailProfile } = await dbClient
           .from('profiles')
           .select('*')
           .eq('email', session.user.email ?? '')
@@ -191,7 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    dbClient.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         setSession(session);
       } else {
@@ -205,7 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = dbClient.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (!session) {
         setProfile(null);
@@ -226,9 +225,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, profile, fetchProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    if (isSupabaseConfigured) {
+    if (isDatabaseConnected) {
       try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await dbClient.auth.signInWithPassword({ email, password });
         if (!error && data.session) {
           return { error: null };
         }
@@ -240,7 +239,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Demo Mode Fallback for local testing without Supabase Cloud
+    // Demo Mode Fallback for local testing without PostgreSQL Cloud
     const lowerEmail = email.toLowerCase().trim();
     const demoProf = DEMO_PROFILES[lowerEmail] || {
       id: '11111111-1111-1111-1111-111111111111',
@@ -284,7 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { data, error } = await dbClient.auth.signUp({
         email,
         password,
         options: {
@@ -345,7 +344,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     try {
-      await supabase.auth.signOut();
+      await dbClient.auth.signOut();
     } catch (e) {
       // ignore
     }

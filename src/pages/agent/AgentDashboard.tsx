@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { fullName } from '@/lib/constants';
 import type { TicketWithRelations } from '@/types';
@@ -89,7 +89,7 @@ export function AgentDashboard() {
     let allTickets: TicketWithRelations[] = [];
 
     try {
-      const { data } = await supabase.from('tickets').select(`
+      const { data } = await dbClient.from('tickets').select(`
         *,
         accounts(id, company_name, account_code),
         created_by_user:profiles!tickets_created_by_user_id_fkey(id, first_name, last_name, email),

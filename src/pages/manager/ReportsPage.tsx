@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, CardBody, CardHeader, Spinner } from '@/components/ui';
 import { PriorityBadge, StatusBadge } from '@/components/ui/Badges';
 import { formatRelativeTime, getSlaStatus } from '@/lib/constants';
@@ -23,7 +23,7 @@ export function ReportsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
+    const { data } = await dbClient
       .from('tickets')
       .select(`
         *,
@@ -38,16 +38,16 @@ export function ReportsPage() {
     if (data) {
       setTickets(data as unknown as TicketWithRelations[]);
 
-      const ids = data.map((t) => t.id);
+      const ids = (data as any[]).map((t: any) => t.id);
       if (ids.length > 0) {
-        const { data: slaData } = await supabase
+        const { data: slaData } = await dbClient
           .from('ticket_sla_snapshots')
           .select('*')
           .in('ticket_id', ids)
           .order('created_at', { ascending: false });
         if (slaData) {
           const map: Record<string, TicketSlaSnapshot> = {};
-          slaData.forEach((s) => { if (!map[s.ticket_id]) map[s.ticket_id] = s as TicketSlaSnapshot; });
+          (slaData as any[]).forEach((s: any) => { if (!map[s.ticket_id]) map[s.ticket_id] = s as TicketSlaSnapshot; });
           setSlaSnapshots(map);
         }
       }
@@ -57,7 +57,7 @@ export function ReportsPage() {
       let resolvedCount = 0;
       let totalResolutionMs = 0;
 
-      data.forEach((t) => {
+      (data as any[]).forEach((t: any) => {
         byPriority[t.priority] = (byPriority[t.priority] || 0) + 1;
         byStatus[t.status] = (byStatus[t.status] || 0) + 1;
         if (t.status === 'RESOLVED' || t.status === 'CLOSED') {
@@ -69,11 +69,11 @@ export function ReportsPage() {
       });
 
       setStats({
-        total: data.length,
-        open: data.filter((t) => !['RESOLVED', 'CLOSED', 'CANCELLED'].includes(t.status)).length,
-        resolved: data.filter((t) => t.status === 'RESOLVED').length,
-        closed: data.filter((t) => t.status === 'CLOSED').length,
-        breached: data.filter((t) => t.first_response_breached).length,
+        total: (data as any[]).length,
+        open: (data as any[]).filter((t: any) => !['RESOLVED', 'CLOSED', 'CANCELLED'].includes(t.status)).length,
+        resolved: (data as any[]).filter((t: any) => t.status === 'RESOLVED').length,
+        closed: (data as any[]).filter((t: any) => t.status === 'CLOSED').length,
+        breached: (data as any[]).filter((t: any) => t.first_response_breached).length,
         avgResolutionHours: resolvedCount > 0 ? (totalResolutionMs / resolvedCount) / (1000 * 60 * 60) : 0,
         byPriority,
         byStatus,

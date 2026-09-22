@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Avatar } from '@/components/ui/Badges';
 import { formatRelativeTime, fullName, STATUS_LABELS } from '@/lib/constants';
@@ -274,10 +274,10 @@ export function FreshdeskTicketInbox() {
 
     try {
       const [agentsRes, teamsRes, typesRes, ticketRes] = await Promise.all([
-        supabase.from('profiles').select('*').in('user_type', ['agent', 'manager', 'account_manager', 'admin']).order('first_name'),
-        supabase.from('support_teams').select('*').eq('is_active', true).order('name'),
-        supabase.from('ticket_types').select('*').eq('is_active', true).order('sort_order'),
-        supabase.from('tickets').select(`
+        dbClient.from('profiles').select('*').in('user_type', ['agent', 'manager', 'account_manager', 'admin']).order('first_name'),
+        dbClient.from('support_teams').select('*').eq('is_active', true).order('name'),
+        dbClient.from('ticket_types').select('*').eq('is_active', true).order('sort_order'),
+        dbClient.from('tickets').select(`
           *,
           accounts(id, company_name, account_code),
           created_by_user:profiles!tickets_created_by_user_id_fkey(id, first_name, last_name, email),
@@ -306,16 +306,16 @@ export function FreshdeskTicketInbox() {
       if (ticketRes.data && ticketRes.data.length > 0) {
         rawTickets = [...customTickets, ...(ticketRes.data as unknown as TicketWithRelations[])];
 
-        const ids = ticketRes.data.map((t) => t.id);
-        const { data: slaData } = await supabase
+        const ids = (ticketRes.data as any[]).map((t: any) => t.id);
+        const { data: slaData } = await dbClient
           .from('ticket_sla_snapshots')
           .select('*')
           .in('ticket_id', ids)
           .order('created_at', { ascending: false });
 
-        if (slaData && slaData.length > 0) {
+        if (slaData && (slaData as any[]).length > 0) {
           const map: Record<string, TicketSlaSnapshot> = {};
-          slaData.forEach((s) => { if (!map[s.ticket_id]) map[s.ticket_id] = s as TicketSlaSnapshot; });
+          (slaData as any[]).forEach((s: any) => { if (!map[s.ticket_id]) map[s.ticket_id] = s as TicketSlaSnapshot; });
           setSlaSnapshots(map);
         } else {
           setSlaSnapshots(INITIAL_SLA_SNAPSHOTS);
@@ -368,7 +368,7 @@ export function FreshdeskTicketInbox() {
     );
 
     try {
-      await supabase.from('tickets').update({
+      await dbClient.from('tickets').update({
         ...updates,
         updated_at: new Date().toISOString(),
       }).eq('id', ticketId);
@@ -421,7 +421,7 @@ export function FreshdeskTicketInbox() {
 
 
     try {
-      await supabase.from('tickets').update({ assigned_agent_id: agentId, updated_at: new Date().toISOString() }).in('id', ids);
+      await dbClient.from('tickets').update({ assigned_agent_id: agentId, updated_at: new Date().toISOString() }).in('id', ids);
     } catch (e) {}
   };
 
@@ -433,7 +433,7 @@ export function FreshdeskTicketInbox() {
     setSelectedIds(new Set());
 
     try {
-      await supabase.from('tickets').update({ status, updated_at: new Date().toISOString() }).in('id', ids);
+      await dbClient.from('tickets').update({ status, updated_at: new Date().toISOString() }).in('id', ids);
     } catch (e) {}
   };
 
@@ -466,7 +466,7 @@ export function FreshdeskTicketInbox() {
     } catch (e) {}
 
     try {
-      await supabase.from('tickets').delete().in('id', ids);
+      await dbClient.from('tickets').delete().in('id', ids);
     } catch (e) {}
   };
 

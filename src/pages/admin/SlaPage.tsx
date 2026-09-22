@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, Spinner, Button, Input, Select } from '@/components/ui';
 import { Badge } from '@/components/ui/Badges';
 import { formatDuration } from '@/lib/constants';
@@ -16,13 +16,13 @@ export function SlaPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: planData } = await supabase.from('support_plans').select('*').order('sort_order');
+    const { data: planData } = await dbClient.from('support_plans').select('*').order('sort_order');
     if (planData) setPlans(planData as SupportPlan[]);
 
-    const { data: slaData } = await supabase.from('sla_policies').select('*');
+    const { data: slaData } = await dbClient.from('sla_policies').select('*');
     if (slaData) {
       const map: Record<string, SlaPolicy[]> = {};
-      slaData.forEach((s) => {
+      slaData.forEach((s: any) => {
         const p = s as SlaPolicy;
         if (!map[p.support_plan_id]) map[p.support_plan_id] = [];
         map[p.support_plan_id].push(p);
@@ -42,7 +42,7 @@ export function SlaPage() {
     const update: any = { updated_at: new Date().toISOString() };
     update[field] = field.includes('minutes') ? parseInt(value) : value;
 
-    await supabase.from('sla_policies').update(update).eq('id', existing.id);
+    await dbClient.from('sla_policies').update(update).eq('id', existing.id);
     const key = `${planId}-${priority}-${field}`;
     setEditing((prev) => { const next = { ...prev }; delete next[key]; return next; });
     load();

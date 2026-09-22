@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, Spinner, Button, Input, Textarea, Modal, EmptyState } from '@/components/ui';
 import { Badge, Avatar } from '@/components/ui/Badges';
 import { fullName } from '@/lib/constants';
@@ -16,11 +16,11 @@ export function TeamsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: teamData } = await supabase.from('support_teams').select('*').order('name');
+    const { data: teamData } = await dbClient.from('support_teams').select('*').order('name');
     if (teamData) {
       const teamsWithMembers = await Promise.all(
         (teamData as SupportTeam[]).map(async (team) => {
-          const { data: members } = await supabase
+          const { data: members } = await dbClient
             .from('support_team_members')
             .select('user:profiles(*)')
             .eq('team_id', team.id);
@@ -37,9 +37,9 @@ export function TeamsPage() {
   const handleSave = async () => {
     setSaving(true);
     if (editing) {
-      await supabase.from('support_teams').update({ name: form.name, description: form.description || null, is_active: form.is_active, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      await dbClient.from('support_teams').update({ name: form.name, description: form.description || null, is_active: form.is_active, updated_at: new Date().toISOString() }).eq('id', editing.id);
     } else {
-      await supabase.from('support_teams').insert({ name: form.name, description: form.description || null, is_active: form.is_active });
+      await dbClient.from('support_teams').insert({ name: form.name, description: form.description || null, is_active: form.is_active });
     }
     setSaving(false);
     setShowModal(false);

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, Spinner, Button, Input, Textarea, Select, Modal } from '@/components/ui';
 import { Badge } from '@/components/ui/Badges';
 import type { SupportPlan } from '@/types';
@@ -15,7 +15,7 @@ export function PlansPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from('support_plans').select('*').order('sort_order');
+    const { data } = await dbClient.from('support_plans').select('*').order('sort_order');
     if (data) setPlans(data as SupportPlan[]);
     setLoading(false);
   }, []);
@@ -50,9 +50,9 @@ export function PlansPage() {
       active: form.active,
     };
     if (editing) {
-      await supabase.from('support_plans').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
+      await dbClient.from('support_plans').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
     } else {
-      await supabase.from('support_plans').insert(payload);
+      await dbClient.from('support_plans').insert(payload);
     }
     setSaving(false);
     setShowModal(false);

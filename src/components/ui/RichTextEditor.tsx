@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered,
   Quote, Code, Link as LinkIcon, Image as ImageIcon, Video,
@@ -58,7 +58,7 @@ export function RichTextEditor({
     const ext = file.name.split('.').pop() || 'bin';
     const path = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-    const { error } = await supabase.storage
+    const { error } = await dbClient.storage
       .from('attachments')
       .upload(path, file, { cacheControl: '3600', upsert: false });
 
@@ -67,7 +67,7 @@ export function RichTextEditor({
       return null;
     }
 
-    const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(path);
+    const { data: urlData } = dbClient.storage.from('attachments').getPublicUrl(path);
     return {
       url: urlData.publicUrl,
       name: file.name,

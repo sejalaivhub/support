@@ -1,5 +1,5 @@
 import { Role, Agent, RolePermissionMatrix } from '@/types/agentRole';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 
 const ROLES_STORAGE_KEY = 'aiv_custom_roles_v1';
 const AGENTS_STORAGE_KEY = 'aiv_custom_agents_v1';

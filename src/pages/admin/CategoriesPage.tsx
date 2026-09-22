@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { Card, Spinner, Button, Input, Modal, EmptyState } from '@/components/ui';
 import { Badge } from '@/components/ui/Badges';
 import type { TicketType, TicketCategory } from '@/types';
@@ -16,9 +16,9 @@ export function CategoriesPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: typeData } = await supabase.from('ticket_types').select('*').order('sort_order');
+    const { data: typeData } = await dbClient.from('ticket_types').select('*').order('sort_order');
     if (typeData) setTypes(typeData as TicketType[]);
-    const { data: catData } = await supabase.from('ticket_categories').select('*').order('sort_order');
+    const { data: catData } = await dbClient.from('ticket_categories').select('*').order('sort_order');
     if (catData) setCategories(catData as TicketCategory[]);
     setLoading(false);
   }, []);
@@ -28,15 +28,15 @@ export function CategoriesPage() {
   const handleSave = async () => {
     if (modalMode === 'type') {
       if (editing) {
-        await supabase.from('ticket_types').update({ name: form.name, is_active: form.is_active, updated_at: new Date().toISOString() }).eq('id', editing.id);
+        await dbClient.from('ticket_types').update({ name: form.name, is_active: form.is_active, updated_at: new Date().toISOString() }).eq('id', editing.id);
       } else {
-        await supabase.from('ticket_types').insert({ name: form.name, is_active: form.is_active, sort_order: types.length + 1 });
+        await dbClient.from('ticket_types').insert({ name: form.name, is_active: form.is_active, sort_order: types.length + 1 });
       }
     } else {
       if (editing) {
-        await supabase.from('ticket_categories').update({ name: form.name, is_active: form.is_active, updated_at: new Date().toISOString() }).eq('id', editing.id);
+        await dbClient.from('ticket_categories').update({ name: form.name, is_active: form.is_active, updated_at: new Date().toISOString() }).eq('id', editing.id);
       } else {
-        await supabase.from('ticket_categories').insert({ name: form.name, is_active: form.is_active, sort_order: categories.length + 1 });
+        await dbClient.from('ticket_categories').insert({ name: form.name, is_active: form.is_active, sort_order: categories.length + 1 });
       }
     }
     setShowModal(false);

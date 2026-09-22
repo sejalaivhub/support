@@ -9,7 +9,7 @@ import {
 import {
   getStoredAgents, saveAgent, deleteAgent, getStoredRoles
 } from '@/lib/agentRoleService';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { sendAccountActivationEmail } from '@/lib/emailService';
 import type { Agent, AgentType, TicketAccessScope, AgentStatus, Role } from '@/types/agentRole';
 import type { SupportTeam } from '@/types';
@@ -135,9 +135,9 @@ export function AgentsPage() {
     setAgents(loadedAgents);
     setRoles(loadedRoles);
 
-    // Fetch live teams from Supabase if available
+    // Fetch live teams from PostgreSQL if available
     try {
-      const { data } = await supabase.from('support_teams').select('*').order('name');
+      const { data } = await dbClient.from('support_teams').select('*').order('name');
       if (data && data.length > 0) {
         setTeams(data as SupportTeam[]);
       }

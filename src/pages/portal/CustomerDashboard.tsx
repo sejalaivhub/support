@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardBody, Spinner, EmptyState, Button } from '@/components/ui';
 import { PriorityBadge, StatusBadge } from '@/components/ui/Badges';
@@ -21,7 +21,7 @@ export function CustomerDashboard() {
     }
     setLoading(true);
 
-    let query = supabase
+    let query = dbClient
       .from('tickets')
       .select('*')
       .eq('account_id', profile.account_id)
@@ -29,7 +29,7 @@ export function CustomerDashboard() {
       .limit(10);
 
     if (profile.user_type === 'customer_user') {
-      const { data: account } = await supabase
+      const { data: account } = await dbClient
         .from('accounts')
         .select('customer_ticket_visibility')
         .eq('id', profile.account_id)
@@ -44,10 +44,10 @@ export function CustomerDashboard() {
     if (data) {
       setTickets(data as Ticket[]);
       setStats({
-        open: data.filter((t) => !['RESOLVED', 'CLOSED', 'CANCELLED'].includes(t.status)).length,
-        resolved: data.filter((t) => ['RESOLVED', 'CLOSED'].includes(t.status)).length,
-        waiting: data.filter((t) => ['WAITING_FOR_CUSTOMER'].includes(t.status)).length,
-        total: data.length,
+        open: (data as any[]).filter((t: any) => !['RESOLVED', 'CLOSED', 'CANCELLED'].includes(t.status)).length,
+        resolved: (data as any[]).filter((t: any) => ['RESOLVED', 'CLOSED'].includes(t.status)).length,
+        waiting: (data as any[]).filter((t: any) => ['WAITING_FOR_CUSTOMER'].includes(t.status)).length,
+        total: (data as any[]).length,
       });
     }
     setLoading(false);
