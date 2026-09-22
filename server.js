@@ -76,29 +76,78 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// --- Auth compatibility endpoints ---
+// --- Real Database Authentication endpoints ---
+app.post('/auth/v1/signup', async (req, res) => {
+  const { email, password, data: userData } = req.body;
+  const firstName = userData?.first_name || '';
+  const lastName = userData?.last_name || '';
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  try {
+    const existing = await pool.query('SELECT id FROM public.profiles WHERE lower(email) = lower($1) LIMIT 1', [email]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'An account with this email already exists. Please sign in.' });
+    }
+
+    // Default to the first active customer account if not specified
+    const defAcct = await pool.query('SELECT id FROM public.accounts WHERE status = \'ACTIVE\' ORDER BY created_at ASC LIMIT 1');
+    const accountId = defAcct.rows[0]?.id || null;
+
+    const insertRes = await pool.query(
+      `INSERT INTO public.profiles (email, password_hash, first_name, last_name, user_type, account_id, status)
+       VALUES ($1, $2, $3, $4, 'customer_user', $5, 'active')
+       RETURNING *`,
+      [email.toLowerCase().trim(), password, firstName, lastName, accountId]
+    );
+
+    const user = insertRes.rows[0];
+    const authUser = {
+      id: user.id,
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: user.email,
+      email_confirmed_at: new Date().toISOString(),
+      user_metadata: { first_name: user.first_name, last_name: user.last_name, user_type: user.user_type },
+      created_at: user.created_at,
+    };
+
+    const session = {
+      access_token: 'local-jwt-token',
+      token_type: 'bearer',
+      expires_in: 86400,
+      user: authUser,
+    };
+
+    return res.status(200).json({ session, user: authUser });
+  } catch (err) {
+    console.error('Signup error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/auth/v1/token', async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
   try {
-    const userRes = await pool.query('SELECT * FROM public.profiles WHERE lower(email) = lower($1) LIMIT 1', [email || 'admin@aivsupport.com']);
-    let user = userRes.rows[0];
+    const userRes = await pool.query('SELECT * FROM public.profiles WHERE lower(email) = lower($1) LIMIT 1', [email]);
+    const user = userRes.rows[0];
 
     if (!user) {
-      const demoEmail = email || 'admin@aivsupport.com';
-      const isStaff = demoEmail.includes('admin') || demoEmail.includes('manager') || demoEmail.includes('agent');
-      user = {
-        id: '00000000-0000-0000-0000-000000000a01',
-        auth_uid: '00000000-0000-0000-0000-000000000a01',
-        email: demoEmail,
-        first_name: isStaff ? 'System' : 'Demo',
-        last_name: isStaff ? 'Administrator' : 'User',
-        user_type: demoEmail.includes('admin') ? 'admin' : demoEmail.includes('agent') ? 'agent' : 'customer_user',
-        status: 'active',
-      };
+      return res.status(404).json({ error: 'Account does not exist. Please sign up first.' });
+    }
+
+    // Check password if stored
+    if (user.password_hash && user.password_hash !== password) {
+      return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
     const authId = user.auth_uid || user.id;
-
     const authUser = {
       id: authId,
       aud: 'authenticated',
@@ -108,7 +157,7 @@ app.post('/auth/v1/token', async (req, res) => {
       phone: user.phone || '',
       confirmed_at: new Date().toISOString(),
       last_sign_in_at: new Date().toISOString(),
-      app_metadata: { provider: 'email', providers: ['email'] },
+      app_metadata: { provider: 'email' },
       user_metadata: {
         first_name: user.first_name,
         last_name: user.last_name,

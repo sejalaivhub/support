@@ -340,7 +340,27 @@ class AuthClient {
     data: { session: Session | null; user: SessionUser | null };
     error: { message: string } | null;
   }> {
-    return this.signInWithPassword({ email: options.email, password: options.password });
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/v1/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: options.email,
+          password: options.password,
+          data: options.options?.data || {},
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        return { data: { session: null, user: null }, error: { message: data.error || 'Signup failed' } };
+      }
+      if (data.session) {
+        authSubscribers.forEach((cb) => cb('SIGNED_IN', data.session));
+      }
+      return { data: { session: data.session, user: data.user }, error: null };
+    } catch (err: any) {
+      return { data: { session: null, user: null }, error: { message: err?.message || 'Network error' } };
+    }
   }
 
   async signOut(): Promise<{ error: null }> {

@@ -225,61 +225,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, profile, fetchProfile]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    if (isDatabaseConnected) {
-      try {
-        const { data, error } = await dbClient.auth.signInWithPassword({ email, password });
-        if (!error && data.session) {
-          return { error: null };
-        }
-        if (error && !error.message.includes('Failed to fetch') && !error.message.includes('Invalid login credentials')) {
-          return { error: error.message };
-        }
-      } catch (e) {
-        // ignore
+    try {
+      const { data, error } = await dbClient.auth.signInWithPassword({ email, password });
+      if (error) {
+        return { error: error.message || 'Invalid login credentials' };
       }
+      if (data.session) {
+        localStorage.setItem('explicit_login', 'true');
+        localStorage.setItem('demo_session', JSON.stringify(data.session));
+        setSession(data.session);
+        await fetchProfile();
+        return { error: null };
+      }
+      return { error: 'Login failed. Please check your credentials.' };
+    } catch (err: any) {
+      return { error: err.message || 'Network error during sign in' };
     }
-
-    // Demo Mode Fallback for local testing without PostgreSQL Cloud
-    const lowerEmail = email.toLowerCase().trim();
-    const demoProf = DEMO_PROFILES[lowerEmail] || {
-      id: '11111111-1111-1111-1111-111111111111',
-      account_id: null,
-      auth_uid: '11111111-1111-1111-1111-111111111111',
-      email: lowerEmail,
-      first_name: lowerEmail.split('@')[0],
-      last_name: 'User',
-      user_type: lowerEmail.includes('admin') ? 'admin' : lowerEmail.includes('agent') ? 'agent' : 'customer_user',
-      status: 'active',
-      phone: null,
-      job_title: 'Demo User',
-      avatar_url: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      activated_at: new Date().toISOString(),
-    };
-
-    const mockSession = {
-      access_token: 'demo-access-token',
-      token_type: 'bearer',
-      expires_in: 3600,
-      refresh_token: 'demo-refresh-token',
-      user: {
-        id: demoProf.auth_uid,
-        email: demoProf.email,
-        app_metadata: {},
-        user_metadata: {},
-        aud: 'authenticated',
-        created_at: new Date().toISOString(),
-      },
-    } as unknown as Session;
-
-    localStorage.setItem('explicit_login', 'true');
-    localStorage.setItem('demo_session', JSON.stringify(mockSession));
-    localStorage.setItem('demo_profile', JSON.stringify(demoProf));
-    setSession(mockSession);
-    setProfile(demoProf);
-    return { error: null };
-  }, []);
+  }, [fetchProfile]);
 
   const signUp = useCallback(async (email: string, password: string, firstName: string, lastName: string) => {
     try {
@@ -293,54 +255,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
         },
       });
-      if (!error && data) {
+      if (error) {
+        return { error: error.message || 'Registration failed' };
+      }
+      if (data && data.session) {
         localStorage.setItem('explicit_login', 'true');
+        localStorage.setItem('demo_session', JSON.stringify(data.session));
+        setSession(data.session);
+        await fetchProfile();
         return { error: null };
       }
-    } catch (e) {
-      // ignore
+      return { error: 'Registration could not be completed.' };
+    } catch (err: any) {
+      return { error: err.message || 'Network error during registration' };
     }
-
-    const lowerEmail = email.toLowerCase().trim();
-    const demoProf: Profile = {
-      id: crypto.randomUUID(),
-      account_id: null,
-      auth_uid: crypto.randomUUID(),
-      email: lowerEmail,
-      first_name: firstName,
-      last_name: lastName,
-      user_type: 'customer_user',
-      status: 'active',
-      phone: null,
-      job_title: 'Customer User',
-      avatar_url: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      activated_at: new Date().toISOString(),
-    };
-
-    const mockSession = {
-      access_token: 'demo-access-token',
-      token_type: 'bearer',
-      expires_in: 3600,
-      refresh_token: 'demo-refresh-token',
-      user: {
-        id: demoProf.auth_uid,
-        email: demoProf.email,
-        app_metadata: {},
-        user_metadata: {},
-        aud: 'authenticated',
-        created_at: new Date().toISOString(),
-      },
-    } as unknown as Session;
-
-    localStorage.setItem('explicit_login', 'true');
-    localStorage.setItem('demo_session', JSON.stringify(mockSession));
-    localStorage.setItem('demo_profile', JSON.stringify(demoProf));
-    setSession(mockSession);
-    setProfile(demoProf);
-    return { error: null };
-  }, []);
+  }, [fetchProfile]);
 
   const signOut = useCallback(async () => {
     try {
