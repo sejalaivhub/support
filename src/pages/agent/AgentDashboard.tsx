@@ -179,7 +179,7 @@ export function AgentDashboard() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="p-6 sm:p-8 space-y-6">
       {/* 1. TOP TRIAL & SETUP BANNER (Matching Freshdesk screenshot) */}
       <div className="bg-gradient-to-r from-blue-50 via-sky-50 to-indigo-50 border border-blue-100 rounded-xl px-5 py-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-2 text-xs text-blue-950 font-medium">

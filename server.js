@@ -92,7 +92,7 @@ app.get('/api/health', async (req, res) => {
 // In-memory verification codes store with 10-minute expiry
 const pendingVerifications = new Map();
 
-// Helper: Ensure verification codes table exists in PostgreSQL
+// Helper: Ensure verification codes and profile columns exist in PostgreSQL
 async function ensureVerificationTable() {
   try {
     await pool.query(`
@@ -107,6 +107,22 @@ async function ensureVerificationTable() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Ensure all required columns exist on profiles table
+    await pool.query(`
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS auth_uid VARCHAR(255);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS unique_external_id VARCHAR(255);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS social_handle VARCHAR(255);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS social_platform VARCHAR(50);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS address TEXT;
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS timezone VARCHAR(100);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS language VARCHAR(50);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS about TEXT;
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS other_phone VARCHAR(50);
+      ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS other_phone_type VARCHAR(50);
+    `);
+    console.log('✅ PostgreSQL schema verified (profiles & verification codes ready)');
   } catch (e) {
     console.warn('Verification table warning:', e.message);
   }

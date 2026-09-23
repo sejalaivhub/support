@@ -287,7 +287,7 @@ export function SettingsPage() {
   ];
 
   return (
-    <div className="bg-slate-50 min-h-screen -m-6 p-6">
+    <div className="bg-slate-50 min-h-screen p-6 sm:p-8">
       {/* Top Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>

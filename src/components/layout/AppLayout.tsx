@@ -48,21 +48,16 @@ const adminNav: NavItem[] = [
 
 
 function getNavItems(userType: string): NavItem[] {
-  switch (userType) {
-    case 'customer_user':
-    case 'customer_admin':
-      return customerNav;
-    case 'agent':
-      return agentNav;
-    case 'manager':
-      return managerNav;
-    case 'account_manager':
-      return [...agentNav, { to: '/manager/reports', label: 'Reports', icon: BarChart3 }];
-    case 'admin':
-      return adminNav;
-    default:
-      return customerNav;
+  if (userType === 'admin') {
+    return adminNav;
   }
+  
+  // As per requirements: "For a particular user, only the Tickets and Submit Ticket options should be visible."
+  // Applying this to all non-admins.
+  return [
+    { to: '/agent/inbox', label: 'Tickets', icon: Ticket },
+    { to: '/agent/tickets/new', label: 'Submit Ticket', icon: Plus },
+  ];
 }
 
 function getPortalLabel(userType: string): string {

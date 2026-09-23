@@ -26,6 +26,18 @@ export function FreshdeskSidebar({ className = '', onCollapseChange }: Freshdesk
     }
   });
 
+  const [contactsMenuOpen, setContactsMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setContactsMenuOpen(false);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    setContactsMenuOpen(false);
+  }, [location.pathname]);
+
   const toggleCollapse = () => {
     setIsCollapsed((prev) => {
       const next = !prev;
@@ -147,27 +159,78 @@ export function FreshdeskSidebar({ className = '', onCollapseChange }: Freshdesk
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = item.isActive;
+            const isContacts = item.id === 'contacts';
 
             return (
-              <button
-                key={item.id}
-                onClick={item.onClick || (() => navigate(item.path))}
-                title={item.label}
-                className={`w-full flex items-center rounded-lg text-xs font-medium transition-colors ${
-                  isCollapsed ? 'h-9 justify-center' : 'h-9 px-3 gap-3'
-                } ${
-                  active
-                    ? 'bg-[#11263c] text-white shadow-xs'
-                    : 'text-[#475569] hover:text-[#12344d] hover:bg-slate-100'
-                }`}
-              >
-                <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-white stroke-[2.2]' : 'text-slate-600'}`} />
-                {!isCollapsed && (
-                  <span className="truncate whitespace-nowrap text-xs font-medium">
-                    {item.label}
-                  </span>
+              <div key={item.id} className="relative group">
+                <button
+                  onClick={(e) => {
+                    if (isContacts) {
+                      e.stopPropagation();
+                      setContactsMenuOpen((prev) => !prev);
+                      return;
+                    }
+                    if (item.onClick) {
+                      item.onClick();
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
+                  title={item.label}
+                  className={`w-full flex items-center rounded-lg text-xs font-medium transition-colors ${
+                    isCollapsed ? 'h-9 justify-center' : 'h-9 px-3 gap-3'
+                  } ${
+                    active
+                      ? 'bg-[#11263c] text-white shadow-xs'
+                      : 'text-[#475569] hover:text-[#12344d] hover:bg-slate-100'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 flex-shrink-0 ${active ? 'text-white stroke-[2.2]' : 'text-slate-600'}`} />
+                  {!isCollapsed && (
+                    <span className="truncate whitespace-nowrap text-xs font-medium">
+                      {item.label}
+                    </span>
+                  )}
+                </button>
+
+                {/* Freshdesk Hover/Click Submenu (Matching Screenshot 1: Contacts & Companies) */}
+                {isContacts && (
+                  <div
+                    className={`absolute left-full top-0 ml-2 flex-col bg-white rounded-xl shadow-xl border border-gray-200/80 p-1.5 w-40 z-50 animate-in fade-in zoom-in-95 duration-100 ${
+                      contactsMenuOpen ? 'flex' : 'hidden group-hover:flex'
+                    }`}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContactsMenuOpen(false);
+                        navigate('/admin/users');
+                      }}
+                      className={`px-3 py-2 text-left text-xs font-semibold rounded-lg transition-colors ${
+                        location.pathname.startsWith('/admin/users') || location.pathname.startsWith('/admin/contacts')
+                          ? 'bg-gray-100 text-[#12344d]'
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                      }`}
+                    >
+                      Contacts
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContactsMenuOpen(false);
+                        navigate('/admin/accounts');
+                      }}
+                      className={`px-3 py-2 text-left text-xs font-semibold rounded-lg transition-colors ${
+                        location.pathname.startsWith('/admin/accounts')
+                          ? 'bg-gray-100 text-[#12344d]'
+                          : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                      }`}
+                    >
+                      Companies
+                    </button>
+                  </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </nav>

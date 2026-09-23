@@ -51,7 +51,7 @@ export function SlaPage() {
   if (loading) return <Spinner label="Loading SLA policies..." />;
 
   return (
-    <div className="space-y-5">
+    <div className="p-6 sm:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">SLA Policies</h1>
         <p className="text-sm text-gray-500 mt-1">Configure response and resolution targets per plan and priority</p>

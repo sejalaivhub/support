@@ -2,11 +2,29 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { dbClient } from '@/lib/dbClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Card, Spinner, EmptyState, Button, Input, Select } from '@/components/ui';
-import { PriorityBadge, StatusBadge } from '@/components/ui/Badges';
-import { formatRelativeTime, PRIORITY_LABELS, STATUS_LABELS } from '@/lib/constants';
-import type { Ticket, TicketPriority, TicketStatus } from '@/types';
-import { Ticket as TicketIcon, Plus, Search } from 'lucide-react';
+import { Spinner } from '@/components/ui';
+import type { Ticket } from '@/types';
+import { Search, Download, Globe } from 'lucide-react';
+
+function formatCustomDate(dateString: string) {
+  const d = new Date(dateString);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const dayName = days[d.getDay()];
+  const dateNum = d.getDate();
+  const monthName = months[d.getMonth()];
+  
+  let hours = d.getHours();
+  const minutes = d.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  
+  hours = hours % 12;
+  hours = hours ? hours : 12; 
+  const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+  
+  return `${dayName}, ${dateNum} ${monthName} at ${hours}:${minutesStr} ${ampm}`;
+}
 
 export function TicketList() {
   const { profile } = useAuth();
@@ -14,24 +32,15 @@ export function TicketList() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
+  
+  // Filter states to match UI
+  const [sortBy, setSortBy] = useState('Date Created');
+  const [statusFilter, setStatusFilter] = useState('All Tickets');
 
   const loadTickets = useCallback(async () => {
     setLoading(true);
 
-    let deletedIds: string[] = [];
-    try {
-      deletedIds = JSON.parse(localStorage.getItem('deleted_ticket_ids') || '[]');
-    } catch (e) {}
-
-    let customTickets: Ticket[] = [];
-    try {
-      customTickets = JSON.parse(localStorage.getItem('local_custom_tickets') || '[]');
-    } catch (e) {}
-
     if (!profile?.account_id) {
-      setTickets(customTickets.filter((t) => !deletedIds.includes(t.id)));
       setLoading(false);
       return;
     }
@@ -44,127 +53,217 @@ export function TicketList() {
         .order('created_at', { ascending: false });
 
       if (profile.user_type === 'customer_user') {
-        const { data: account } = await dbClient
-          .from('accounts')
-          .select('customer_ticket_visibility')
-          .eq('id', profile.account_id)
-          .maybeSingle();
-
-        if (account?.customer_ticket_visibility === 'OWN_ONLY') {
-          query = query.eq('created_by_user_id', profile.id);
-        }
+        // Enforce data security: customer_user can ONLY see their own tickets
+        query = query.eq('created_by_user_id', profile.id);
       }
+
+      let customTickets: Ticket[] = [];
+      try {
+        customTickets = JSON.parse(localStorage.getItem('local_custom_tickets') || '[]');
+      } catch (e) {}
 
       const { data } = await query;
-      if (data && data.length > 0) {
-        const combined = [...customTickets, ...(data as Ticket[])];
-        const uniqueMap = new Map();
-        combined.forEach(t => uniqueMap.set(t.id, t));
-        setTickets(Array.from(uniqueMap.values()).filter((t) => !deletedIds.includes(t.id)));
-      } else {
-        setTickets(customTickets.filter((t) => !deletedIds.includes(t.id)));
+      
+      let allTickets: Ticket[] = [...customTickets];
+      if (data) {
+        allTickets = [...customTickets, ...(data as Ticket[])];
       }
+      
+      const uniqueMap = new Map();
+      allTickets.forEach(t => uniqueMap.set(t.id, t));
+      setTickets(Array.from(uniqueMap.values()));
+      
     } catch (e) {
-      setTickets(customTickets.filter((t) => !deletedIds.includes(t.id)));
+      console.error("Failed to load tickets", e);
+      try {
+        const customTickets = JSON.parse(localStorage.getItem('local_custom_tickets') || '[]');
+        setTickets(customTickets);
+      } catch (err) {}
     }
     setLoading(false);
   }, [profile]);
 
   useEffect(() => { loadTickets(); }, [loadTickets]);
 
-  const filtered = tickets.filter((t) => {
+  const filteredTickets = tickets.filter((t) => {
+    // Basic search
     if (search && !t.subject.toLowerCase().includes(search.toLowerCase()) && !t.ticket_number.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter !== 'all' && t.status !== statusFilter) return false;
-    if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
+    
+    // Status filter
+    if (statusFilter === 'Open or Pending') {
+      if (!['OPEN', 'PENDING', 'NEW', 'IN_PROGRESS'].includes(t.status)) return false;
+    } else if (statusFilter === 'Resolved or Closed') {
+      if (!['RESOLVED', 'CLOSED'].includes(t.status)) return false;
+    }
+    
     return true;
+  });
+
+  // Sort logic
+  const sortedTickets = [...filteredTickets].sort((a, b) => {
+    if (sortBy === 'Date Created' || sortBy === 'Descending') {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    } else if (sortBy === 'Ascending') {
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    }
+    // Add other sort options if needed
+    return 0;
   });
 
   if (loading) return <Spinner label="Loading tickets..." />;
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Tickets</h1>
-          <p className="text-sm text-gray-500 mt-1">{filtered.length} ticket{filtered.length !== 1 ? 's' : ''}</p>
+    <div className="min-h-screen bg-[#f5f7f9] font-sans">
+      
+      {/* Blue Header Area */}
+      <div className="bg-[#12344d] text-white pt-6 pb-12">
+        <div className="max-w-[1200px] mx-auto px-4 lg:px-8">
+          <div className="flex justify-between items-start mb-8">
+            <Link to="/portal" className="text-white hover:underline text-[13px]">
+              Home
+            </Link>
+            
+            {/* Search Bar matching screenshot */}
+            <div className="relative w-[300px]">
+              <input
+                type="text"
+                placeholder="Search your tickets here..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-4 pr-10 py-2 rounded text-[13px] text-gray-900 focus:outline-none"
+              />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            </div>
+          </div>
+          
+          <h1 className="text-[32px] font-bold">Tickets</h1>
         </div>
-        <Button onClick={() => navigate('/portal/tickets/new')}>
-          <Plus className="w-4 h-4" /> New Ticket
-        </Button>
       </div>
 
-      <Card>
-        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by ticket number or subject..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-            />
-          </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-          >
-            <option value="all">All Statuses</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-          >
-            <option value="all">All Priorities</option>
-            {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{value} - {label}</option>
-            ))}
-          </select>
-        </div>
+      {/* Main Content Area */}
+      <div className="max-w-[1200px] mx-auto px-4 lg:px-8 -mt-6 pb-12">
+        <div className="flex flex-col lg:flex-row gap-6">
+          
+          {/* Left Column: Tickets List */}
+          <div className="flex-1 bg-white rounded shadow-sm border border-gray-100 p-6 min-h-[400px]">
+            {sortedTickets.length === 0 ? (
+              <div className="text-center py-12 text-[#475867] text-[14px]">
+                No tickets found matching your criteria.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {sortedTickets.map((ticket) => {
+                  // Format: "Wed, 23 Sep at 2:39 PM"
+                  const createdStr = formatCustomDate(ticket.created_at);
+                  
+                  // Status badge styling based on freshdesk
+                  let statusColor = "text-[#d7500f] border-[#f4c8b2] bg-[#fbf3ef]"; // Default "Open" look
+                  let statusText = ticket.status;
+                  
+                  if (['RESOLVED', 'CLOSED'].includes(ticket.status)) {
+                    statusColor = "text-[#00824b] border-[#b2e2cd] bg-[#eef8f3]";
+                  } else if (ticket.status === 'PENDING') {
+                    statusColor = "text-[#2c5cc5] border-[#c0d2f4] bg-[#eff3fc]";
+                  }
 
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon={<TicketIcon className="w-12 h-12" />}
-            title="No tickets found"
-            description="Try adjusting your filters or create a new ticket."
-            action={<Link to="/portal/tickets/new"><Button size="sm"><Plus className="w-4 h-4" /> Create Ticket</Button></Link>}
-          />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-100 bg-gray-50/50">
-                  <th className="text-left text-xs font-medium text-gray-500 px-5 py-2.5">Ticket</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 hidden md:table-cell">Subject</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5">Priority</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5">Status</th>
-                  <th className="text-left text-xs font-medium text-gray-500 px-3 py-2.5 hidden lg:table-cell">Created</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => navigate(`/portal/tickets/${ticket.id}`)}>
-                    <td className="px-5 py-3">
-                      <span className="text-xs font-mono text-blue-600 font-medium">{ticket.ticket_number}</span>
-                      <p className="text-sm text-gray-900 md:hidden mt-0.5">{ticket.subject}</p>
-                    </td>
-                    <td className="px-3 py-3 hidden md:table-cell">
-                      <p className="text-sm text-gray-900 truncate max-w-xs">{ticket.subject}</p>
-                    </td>
-                    <td className="px-3 py-3"><PriorityBadge priority={ticket.customer_priority || ticket.priority} label="Cust" /></td>
-                    <td className="px-3 py-3"><StatusBadge status={ticket.status} /></td>
-                    <td className="px-3 py-3 hidden lg:table-cell text-sm text-gray-500">{formatRelativeTime(ticket.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                  return (
+                    <div 
+                      key={ticket.id} 
+                      className="py-4 flex justify-between items-start hover:bg-gray-50 transition-colors cursor-pointer rounded -mx-4 px-4"
+                      onClick={() => navigate(`/portal/tickets/${ticket.id}`)}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Globe className="w-5 h-5 text-[#2c5cc5] mt-0.5 shrink-0" />
+                        <div>
+                          <div className="text-[15px] font-medium text-[#2c5cc5] hover:underline mb-1">
+                            {ticket.subject} <span className="text-[#475867]">#{ticket.ticket_number.replace('AIV-', '')}</span>
+                          </div>
+                          <div className="text-[13px] text-[#475867]">
+                            Created on {createdStr} - via Portal
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`px-2.5 py-0.5 rounded border text-[12px] font-medium shrink-0 ${statusColor}`}>
+                        {statusText.charAt(0).toUpperCase() + statusText.slice(1).toLowerCase()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
-      </Card>
+
+          {/* Right Column: Filters Sidebar */}
+          <div className="w-full lg:w-[300px] shrink-0 space-y-6">
+            
+            <button className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-white border border-[#cfd7df] text-[#12344d] text-[13px] font-semibold rounded hover:bg-gray-50 transition-colors">
+              <Download className="w-4 h-4" /> Export Tickets
+            </button>
+            
+            <div className="bg-[#f5f7f9]">
+              <div className="space-y-4">
+                
+                {/* Sort by */}
+                <div>
+                  <label className="block text-[13px] font-bold text-[#12344d] mb-1.5">Sort by</label>
+                  <select 
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="w-full p-2 bg-white border border-[#cfd7df] rounded text-[13px] text-[#12344d] focus:outline-none focus:border-[#2c5cc5]"
+                  >
+                    <option>Date Created</option>
+                    <option>Last Modified</option>
+                    <option>Priority</option>
+                    <option>Status</option>
+                    <option>Ascending</option>
+                    <option>Descending</option>
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-[13px] font-bold text-[#12344d] mb-1.5">Status</label>
+                  <select 
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full p-2 bg-white border border-[#cfd7df] rounded text-[13px] text-[#12344d] focus:outline-none focus:border-[#2c5cc5]"
+                  >
+                    <option>All Tickets</option>
+                    <option>Open or Pending</option>
+                    <option>Resolved or Closed</option>
+                    <option>Archive</option>
+                  </select>
+                </div>
+
+                {/* Created date */}
+                <div>
+                  <label className="block text-[13px] font-bold text-[#12344d] mb-1.5">Created date</label>
+                  <input 
+                    type="text" 
+                    placeholder="Select dates"
+                    readOnly
+                    className="w-full p-2 bg-white border border-[#cfd7df] rounded text-[13px] text-[#475867] cursor-not-allowed focus:outline-none"
+                  />
+                </div>
+
+                {/* Resolved date */}
+                <div>
+                  <label className="block text-[13px] font-bold text-[#12344d] mb-1.5">Resolved date</label>
+                  <input 
+                    type="text" 
+                    placeholder="Select dates"
+                    readOnly
+                    className="w-full p-2 bg-white border border-[#cfd7df] rounded text-[13px] text-[#475867] cursor-not-allowed focus:outline-none"
+                  />
+                </div>
+                
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }

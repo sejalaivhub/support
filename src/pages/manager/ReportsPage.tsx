@@ -90,7 +90,7 @@ export function ReportsPage() {
   const recentBreached = tickets.filter((t) => t.first_response_breached).slice(0, 10);
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 sm:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Reports & Analytics</h1>
         <p className="text-sm text-gray-500 mt-1">Ticket metrics, SLA performance, and trends</p>

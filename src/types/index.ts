@@ -39,6 +39,16 @@ export interface Profile {
   phone?: string | null;
   mobile?: string | null;
   job_title?: string | null;
+  unique_external_id?: string | null;
+  social_handle?: string | null;
+  social_platform?: string | null;
+  address?: string | null;
+  timezone?: string | null;
+  language?: string | null;
+  tags?: string[] | null;
+  about?: string | null;
+  other_phone?: string | null;
+  other_phone_type?: string | null;
   avatar_url?: string | null;
   activated_at?: string | null;
   created_at: string;

@@ -10,6 +10,9 @@ import {
 import { saveAgent } from '@/lib/agentRoleService';
 import { dbClient } from '@/lib/dbClient';
 import { sendAccountActivationEmail } from '@/lib/emailService';
+import { AddContactSlideOver } from '@/components/contacts/AddContactSlideOver';
+import type { Profile, Account } from '@/types';
+import { useEffect } from 'react';
 
 interface FreshdeskLayoutProps {
   children: ReactNode;
@@ -26,6 +29,31 @@ export function FreshdeskLayout({ children }: FreshdeskLayoutProps) {
   const [showNewDropdown, setShowNewDropdown] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showInviteAgentModal, setShowInviteAgentModal] = useState(false);
+  const [showAddContactSlideOver, setShowAddContactSlideOver] = useState(false);
+  const [contactSuccessToast, setContactSuccessToast] = useState<string | null>(null);
+  const [layoutContacts, setLayoutContacts] = useState<Profile[]>([]);
+  const [layoutAccounts, setLayoutAccounts] = useState<Account[]>([]);
+
+  useEffect(() => {
+    async function loadContactsAndAccounts() {
+      try {
+        const { data: pData } = await dbClient.from('profiles').select('*');
+        if (pData) setLayoutContacts(pData as Profile[]);
+      } catch (e) {}
+
+      try {
+        const { data: aData } = await dbClient.from('accounts').select('*');
+        if (aData) setLayoutAccounts(aData as Account[]);
+      } catch (e) {}
+    }
+    loadContactsAndAccounts();
+  }, [showAddContactSlideOver]);
+
+  useEffect(() => {
+    const handleOpen = () => setShowAddContactSlideOver(true);
+    window.addEventListener('open-add-contact-panel', handleOpen);
+    return () => window.removeEventListener('open-add-contact-panel', handleOpen);
+  }, []);
 
   const handleSignOut = async () => {
     setShowProfileDropdown(false);
@@ -198,7 +226,7 @@ export function FreshdeskLayout({ children }: FreshdeskLayoutProps) {
         {/* 2. MAIN VIEWPORT */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           {/* TOP HEADER / NAVBAR */}
-          <header className="h-14 bg-white border-b border-gray-200 px-6 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
+          <header className="h-14 bg-white border-b border-gray-200 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-20 shadow-2xs">
             
             {/* Left side: Header Title or Freshdesk Views Selector */}
             <div className="flex items-center gap-3">
@@ -255,7 +283,7 @@ export function FreshdeskLayout({ children }: FreshdeskLayoutProps) {
                   <h1 className="text-base font-semibold text-[#12344d] tracking-tight">{headerTitle}</h1>
                 </>
               ) : (
-                <h1 className="text-base font-semibold text-[#12344d] tracking-tight ml-2">{headerTitle}</h1>
+                <h1 className="text-base font-semibold text-[#12344d] tracking-tight ml-3">{headerTitle}</h1>
               )}
             </div>
 
@@ -296,8 +324,11 @@ export function FreshdeskLayout({ children }: FreshdeskLayoutProps) {
                       <span>Message</span>
                     </button>
                     <button
-                      onClick={() => { setShowNewDropdown(false); navigate('/admin/users'); }}
-                      className="w-full text-left px-3.5 py-1.5 text-[#12344d] hover:bg-slate-50 flex items-center gap-2.5"
+                      onClick={() => {
+                        setShowNewDropdown(false);
+                        setShowAddContactSlideOver(true);
+                      }}
+                      className="w-full text-left px-3.5 py-1.5 text-[#12344d] hover:bg-slate-50 flex items-center gap-2.5 font-medium"
                     >
                       <User className="w-4 h-4 text-slate-500" />
                       <span>Contact</span>
@@ -484,7 +515,7 @@ export function FreshdeskLayout({ children }: FreshdeskLayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 flex flex-col min-h-0 bg-white">
+          <main className="flex-1 flex flex-col min-h-0 bg-[#f8fafc]">
             {children}
           </main>
         </div>
@@ -628,6 +659,36 @@ export function FreshdeskLayout({ children }: FreshdeskLayoutProps) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ADD CONTACT SLIDE-OVER PANEL MATCHING SCREENSHOT 3 */}
+      <AddContactSlideOver
+        open={showAddContactSlideOver}
+        onClose={() => setShowAddContactSlideOver(false)}
+        existingContacts={layoutContacts}
+        accounts={layoutAccounts}
+        onSuccess={(newContact) => {
+          setLayoutContacts(prev => [newContact, ...prev.filter(c => c.id !== newContact.id)]);
+          setContactSuccessToast(`Contact ${fullName(newContact.first_name, newContact.last_name)} created successfully!`);
+          setTimeout(() => setContactSuccessToast(null), 4000);
+          window.dispatchEvent(new CustomEvent('contact-created', { detail: newContact }));
+          if (!location.pathname.startsWith('/admin/users')) {
+            navigate('/admin/users');
+          }
+        }}
+      />
+
+      {/* CONTACT CREATED SUCCESS TOAST */}
+      {contactSuccessToast && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-white px-5 py-3 rounded-lg shadow-xl border-t-[3px] border-[#00b27b] animate-in fade-in slide-in-from-top-4">
+          <div className="w-5 h-5 rounded-full bg-[#00b27b] text-white flex items-center justify-center">
+            <Check className="w-3.5 h-3.5 stroke-[3]" />
+          </div>
+          <span className="text-sm font-semibold text-gray-800">{contactSuccessToast}</span>
+          <button onClick={() => setContactSuccessToast(null)} className="text-gray-400 hover:text-gray-600 ml-2">
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
     </div>

@@ -275,11 +275,13 @@ export function FreshdeskTicketInbox() {
     setLoading(true);
 
     try {
-      const [agentsRes, teamsRes, typesRes, ticketRes] = await Promise.all([
+      const [agentsRes, teamsRes, typesRes] = await Promise.all([
         dbClient.from('profiles').select('*').in('user_type', ['agent', 'manager', 'account_manager', 'admin']).order('first_name'),
         dbClient.from('support_teams').select('*').eq('is_active', true).order('name'),
         dbClient.from('ticket_types').select('*').eq('is_active', true).order('sort_order'),
-        dbClient.from('tickets').select(`
+      ]);
+      
+      let ticketQuery = dbClient.from('tickets').select(`
           *,
           accounts(id, company_name, account_code),
           created_by_user:profiles!tickets_created_by_user_id_fkey(id, first_name, last_name, email),
@@ -287,8 +289,13 @@ export function FreshdeskTicketInbox() {
           assigned_team:support_teams(id, name),
           ticket_types(id, name),
           ticket_categories(id, name)
-        `).order('created_at', { ascending: false }),
-      ]);
+        `);
+        
+      if (profile && profile.user_type !== 'admin') {
+        ticketQuery = ticketQuery.or(`assigned_agent_id.eq.${profile.id},created_by_user_id.eq.${profile.id}`);
+      }
+      
+      const ticketRes = await ticketQuery.order('created_at', { ascending: false });
 
       if (agentsRes.data && agentsRes.data.length > 0) setAgents(agentsRes.data as Profile[]);
       if (teamsRes.data && teamsRes.data.length > 0) setTeams(teamsRes.data as SupportTeam[]);
@@ -328,7 +335,13 @@ export function FreshdeskTicketInbox() {
       }
 
       // Exclude any tickets that were deleted
-      const activeTickets = rawTickets.filter((t) => !deletedIds.includes(t.id));
+      let activeTickets = rawTickets.filter((t) => !deletedIds.includes(t.id));
+      
+      // Enforce data security on local dummy data
+      if (profile && profile.user_type !== 'admin') {
+        activeTickets = activeTickets.filter(t => t.assigned_agent_id === profile.id || t.created_by_user_id === profile.id);
+      }
+      
       setTickets(activeTickets);
     } catch (e) {
       let customTickets: TicketWithRelations[] = [];
@@ -336,8 +349,14 @@ export function FreshdeskTicketInbox() {
       try { customTickets = JSON.parse(localStorage.getItem('local_custom_tickets') || '[]'); } catch (err) {}
       try { deletedIds = JSON.parse(localStorage.getItem('deleted_ticket_ids') || '[]'); } catch (err) {}
 
-      const rawTickets = [...customTickets, ...INITIAL_DEMO_TICKETS];
-      setTickets(rawTickets.filter((t) => !deletedIds.includes(t.id)));
+      let rawTickets = [...customTickets, ...INITIAL_DEMO_TICKETS];
+      rawTickets = rawTickets.filter((t) => !deletedIds.includes(t.id));
+      
+      if (profile && profile.user_type !== 'admin') {
+        rawTickets = rawTickets.filter(t => t.assigned_agent_id === profile.id || t.created_by_user_id === profile.id);
+      }
+      
+      setTickets(rawTickets);
       setSlaSnapshots(INITIAL_SLA_SNAPSHOTS);
     }
 
@@ -662,7 +681,7 @@ export function FreshdeskTicketInbox() {
   }, [tickets, starredIds]);
 
   return (
-    <div className="p-4 space-y-3 bg-[#f8fafc] min-h-screen">
+    <div className="p-4 sm:p-6 space-y-3 bg-[#f8fafc] min-h-screen">
       {/* TOOLBAR ROW MATCHING IMAGE 2 */}
       <div className="bg-white border border-gray-200 rounded-lg px-4 py-2 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-700 shadow-2xs">
         {/* Left Toolbar Controls */}

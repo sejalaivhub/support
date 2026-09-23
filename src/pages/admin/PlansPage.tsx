@@ -62,7 +62,7 @@ export function PlansPage() {
   if (loading) return <Spinner label="Loading plans..." />;
 
   return (
-    <div className="space-y-5">
+    <div className="p-6 sm:p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Support Plans</h1>
