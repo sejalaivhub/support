@@ -19,7 +19,7 @@ import {
   AlertCircle, MessageSquare, Lock, User, Tag, Building2, History,
   Paperclip, Download, Phone, Mail, ChevronDown, Check, Sparkles,
   MoreHorizontal, CornerUpLeft, Plus, ExternalLink, ShieldAlert,
-  Edit3, Pencil, X
+  Edit3, Pencil, X, Loader2
 } from 'lucide-react';
 import {
   sendAgentReplyNotification,
@@ -237,14 +237,14 @@ export function TicketDetail() {
       }
       const { data } = await query.maybeSingle();
       if (data) ticketData = data as Ticket;
-    } catch (e) {}
+    } catch (e) { }
 
     if (!ticketData) {
       try {
         const localCustoms: Ticket[] = JSON.parse(localStorage.getItem('local_custom_tickets') || '[]');
         const match = localCustoms.find((t) => t.id === ticketId || t.ticket_number === ticketId);
         if (match) ticketData = match;
-      } catch (e) {}
+      } catch (e) { }
     }
 
     if (!ticketData) {
@@ -334,7 +334,7 @@ export function TicketDetail() {
         }
         setAttachments(map);
       }
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const { data: slaData } = await dbClient
@@ -345,7 +345,7 @@ export function TicketDetail() {
         .limit(1)
         .maybeSingle();
       if (slaData) setSlaSnapshot(slaData as TicketSlaSnapshot);
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const { data: histData } = await dbClient
@@ -354,7 +354,7 @@ export function TicketDetail() {
         .eq('ticket_id', ticketData.id)
         .order('created_at', { ascending: false });
       if (histData) setStatusHistory(histData as TicketStatusHistory[]);
-    } catch (e) {}
+    } catch (e) { }
 
     const userIds = new Set<string>();
     if (ticketData.created_by_user_id) userIds.add(ticketData.created_by_user_id);
@@ -366,7 +366,7 @@ export function TicketDetail() {
     try {
       const customUsers: Profile[] = JSON.parse(localStorage.getItem('local_custom_users') || '[]');
       customUsers.forEach(u => { map[u.id] = u; });
-    } catch (e) {}
+    } catch (e) { }
 
     // 2. Check stored agents
     try {
@@ -379,7 +379,7 @@ export function TicketDetail() {
           email: a.email,
           user_type: 'agent',
           account_id: null,
-          status: a.status === 'ACTIVE' ? 'active' : 'inactive',
+          status: a.status === 'ACTIVE' ? 'active' : 'disabled',
           phone: a.phone,
           mobile: a.mobile,
           job_title: a.job_title,
@@ -388,7 +388,7 @@ export function TicketDetail() {
           updated_at: a.updated_at,
         };
       });
-    } catch (e) {}
+    } catch (e) { }
 
     // 3. Query PostgreSQL profiles
     if (userIds.size > 0) {
@@ -400,7 +400,7 @@ export function TicketDetail() {
         if (profileData) {
           (profileData as any[]).forEach((p: any) => { map[p.id] = p as Profile; });
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     setProfiles(map);
 
@@ -419,7 +419,7 @@ export function TicketDetail() {
             email: a.email,
             user_type: 'agent',
             account_id: null,
-            status: a.status === 'ACTIVE' ? 'active' : 'inactive',
+            status: a.status === 'ACTIVE' ? 'active' : 'disabled',
             phone: a.phone,
             mobile: a.mobile,
             job_title: a.job_title,
@@ -430,12 +430,12 @@ export function TicketDetail() {
         }
       });
       setAgents(Array.from(allAgentsMap.values()));
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const { data: teamData } = await dbClient.from('support_teams').select('*').eq('is_active', true).order('name');
       if (teamData && teamData.length > 0) setTeams(teamData as SupportTeam[]);
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const { data: ctData } = await dbClient.from('profiles').select('*').order('first_name');
@@ -448,7 +448,7 @@ export function TicketDetail() {
             contactsList.push(cu);
           }
         });
-      } catch (e) {}
+      } catch (e) { }
 
       // Add default sejal if not present
       if (!contactsList.find((c) => c.email === 'sejal@aivhub.com')) {
@@ -470,12 +470,12 @@ export function TicketDetail() {
       }
 
       setAllContacts(contactsList);
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const { data: typeData } = await dbClient.from('ticket_types').select('*').eq('is_active', true).order('sort_order');
       if (typeData && typeData.length > 0) setTypes(typeData as TicketType[]);
-    } catch (e) {}
+    } catch (e) { }
 
     setLoading(false);
   }, [ticketId, isStaff]);
@@ -520,7 +520,7 @@ export function TicketDetail() {
           body: reply,
           is_internal: isInternalMsg,
         });
-    } catch (e) {}
+    } catch (e) { }
 
     const creator = profiles[ticket.created_by_user_id];
     let assignedAgent = ticket.assigned_agent_id ? profiles[ticket.assigned_agent_id] : null;
@@ -621,7 +621,7 @@ export function TicketDetail() {
         localCustoms[idx] = { ...localCustoms[idx], ...updates };
         localStorage.setItem('local_custom_tickets', JSON.stringify(localCustoms));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Check status change
     const creator = profiles[ticket.created_by_user_id];
@@ -633,7 +633,7 @@ export function TicketDetail() {
           to_status: propStatus,
           changed_by_user_id: profile.id,
         });
-      } catch (e) {}
+      } catch (e) { }
 
       if (propStatus === 'RESOLVED') {
         try {
@@ -642,7 +642,7 @@ export function TicketDetail() {
             event_type: 'RESOLVED',
             actor_user_id: profile.id,
           });
-        } catch (e) {}
+        } catch (e) { }
       }
 
       sendTicketStatusNotification(
@@ -669,7 +669,7 @@ export function TicketDetail() {
           to_team_id: propGroup || null,
           changed_by_user_id: profile.id,
         });
-      } catch (e) {}
+      } catch (e) { }
 
       if (propAgent && propAgent !== ticket.assigned_agent_id) {
         const targetAgent = profiles[propAgent] || getStoredAgents().find((a) => a.id === propAgent);
@@ -732,7 +732,7 @@ export function TicketDetail() {
         localCustoms[idx] = { ...localCustoms[idx], ...updates };
         localStorage.setItem('local_custom_tickets', JSON.stringify(localCustoms));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     // Update first message if it's the root description message
     setMessages((prev) => {
@@ -784,7 +784,7 @@ export function TicketDetail() {
               list.unshift(ct);
             }
           });
-        } catch (e) {}
+        } catch (e) { }
 
         // If still empty or few, add demo tickets
         Object.values(DEMO_TICKETS_MAP).forEach((dt) => {
@@ -828,7 +828,7 @@ export function TicketDetail() {
         email: match.email,
         user_type: 'agent',
         account_id: null,
-        status: match.status === 'ACTIVE' ? 'active' : 'inactive',
+        status: match.status === 'ACTIVE' ? 'active' : 'disabled',
         phone: match.phone,
         mobile: match.mobile,
         job_title: match.job_title,
@@ -1072,18 +1072,16 @@ export function TicketDetail() {
                 <div
                   key={t.id}
                   onClick={() => navigate(`/agent/tickets/${t.id || t.ticket_number}`)}
-                  className={`p-3 cursor-pointer transition-colors relative flex items-start gap-2.5 ${
-                    isActive ? 'bg-[#f4f7fa] border-l-[3px] border-blue-600' : 'hover:bg-gray-50'
-                  }`}
+                  className={`p-3 cursor-pointer transition-colors relative flex items-start gap-2.5 ${isActive ? 'bg-[#f4f7fa] border-l-[3px] border-blue-600' : 'hover:bg-gray-50'
+                    }`}
                 >
                   {/* Requester Avatar Circle */}
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs uppercase shrink-0 mt-0.5 ${
-                    idx % 3 === 0
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs uppercase shrink-0 mt-0.5 ${idx % 3 === 0
                       ? 'bg-purple-100 text-purple-700'
                       : idx % 3 === 1
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-emerald-100 text-emerald-700'
-                  }`}>
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-emerald-100 text-emerald-700'
+                    }`}>
                     {authorInitial}
                   </div>
 
@@ -1301,11 +1299,10 @@ export function TicketDetail() {
                   <button
                     type="button"
                     onClick={() => setActiveReplyTab('reply')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                      activeReplyTab === 'reply'
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeReplyTab === 'reply'
                         ? 'bg-blue-50 text-[#186ade] border border-blue-200'
                         : 'text-gray-600 hover:bg-gray-100 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <Mail className="w-3.5 h-3.5" />
                     <span>Reply</span>
@@ -1314,11 +1311,10 @@ export function TicketDetail() {
                   <button
                     type="button"
                     onClick={() => setActiveReplyTab('note')}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
-                      activeReplyTab === 'note'
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold transition-colors ${activeReplyTab === 'note'
                         ? 'bg-amber-50 text-amber-700 border border-amber-200'
                         : 'text-gray-600 hover:bg-gray-100 border border-transparent'
-                    }`}
+                      }`}
                   >
                     <Lock className="w-3.5 h-3.5" />
                     <span>Note</span>
@@ -1431,9 +1427,8 @@ export function TicketDetail() {
                   <label className="text-xs font-semibold text-gray-700">Type</label>
                   <div
                     onClick={() => setShowTypeDropdown(!showTypeDropdown)}
-                    className={`w-full flex items-center justify-between px-3 py-1.5 border rounded-md text-xs cursor-pointer transition-all bg-white ${
-                      showTypeDropdown ? 'border-[#2c7be5] ring-1 ring-blue-500' : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 border rounded-md text-xs cursor-pointer transition-all bg-white ${showTypeDropdown ? 'border-[#2c7be5] ring-1 ring-blue-500' : 'border-gray-200 hover:border-gray-300'
+                      }`}
                   >
                     <span className={propType ? 'font-medium text-gray-900' : 'text-gray-500'}>
                       {types.find(t => t.id === propType)?.name || propType || 'Problem'}
@@ -1455,9 +1450,8 @@ export function TicketDetail() {
                                 setPropType(t.id);
                                 setShowTypeDropdown(false);
                               }}
-                              className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between ${
-                                isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
-                              }`}
+                              className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between ${isSelected ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-gray-700 hover:bg-gray-50'
+                                }`}
                             >
                               <span>{t.name}</span>
                               {isSelected && <Check className="w-3.5 h-3.5 text-[#2c7be5]" />}
@@ -1493,9 +1487,8 @@ export function TicketDetail() {
                   <label className="text-xs font-semibold text-gray-700">Priority</label>
                   <div className="relative flex items-center">
                     <span
-                      className={`absolute left-3 w-2 h-2 rounded-full pointer-events-none ${
-                        PRIORITY_CONFIG[propPriority]?.dotColor || 'bg-blue-500'
-                      }`}
+                      className={`absolute left-3 w-2 h-2 rounded-full pointer-events-none ${PRIORITY_CONFIG[propPriority]?.dotColor || 'bg-blue-500'
+                        }`}
                     />
                     <select
                       value={propPriority}
@@ -1517,11 +1510,10 @@ export function TicketDetail() {
                     value={propGroup}
                     disabled={teams.length === 0}
                     onChange={(e) => setPropGroup(e.target.value)}
-                    className={`w-full text-xs rounded-md px-3 py-1.5 font-medium transition-colors cursor-pointer ${
-                      teams.length === 0
+                    className={`w-full text-xs rounded-md px-3 py-1.5 font-medium transition-colors cursor-pointer ${teams.length === 0
                         ? 'bg-gray-100 border border-gray-200 text-gray-400 cursor-not-allowed select-none'
                         : 'bg-white border border-gray-200 text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                    }`}
+                      }`}
                   >
                     <option value="">{teams.length === 0 ? 'No groups found' : '-- Select Group --'}</option>
                     {teams.map((g) => (
@@ -1583,7 +1575,7 @@ export function TicketDetail() {
             >
               {updatingProperties ? (
                 <>
-                  <Spinner size="xs" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Updating...</span>
                 </>
               ) : (
@@ -1722,7 +1714,7 @@ export function TicketDetail() {
               >
                 {savingEdit ? (
                   <>
-                    <Spinner size="xs" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Saving...</span>
                   </>
                 ) : (

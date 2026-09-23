@@ -1,15 +1,70 @@
 services:
+  # ─── PostgreSQL Database ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: aiv_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-aiv_support}
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-root}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres} -d ${PG_DATABASE:-aiv_support}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aiv_network
+
+  # ─── Express Backend API (server.js) ──────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aiv_backend
+    command: ["node", "server.js"]
+    ports:
+      - "8095:8095"
+    env_file:
+      - .env
+    environment:
+      - PORT=8095
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_DATABASE=${PG_DATABASE:-aiv_support}
+      - PG_USER=${PG_USER:-postgres}
+      - PG_PASSWORD=${PG_PASSWORD:-root}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - JWT_SECRET=${JWT_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - aiv_network
+
+  # ─── Vite Frontend Dev Server ─────────────────────────────────────────────
   app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: aiv_support_portal
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
     ports:
       - "8092:8092"
     env_file:
       - .env
     environment:
-      - VITE_BACKEND_API_URL=${VITE_BACKEND_API_URL}
+      - BACKEND_URL=http://backend:8095
+      - VITE_BACKEND_API_URL=http://localhost:8095
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USER=${SMTP_USER}
@@ -17,4 +72,19 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+    depends_on:
+      - backend
     restart: unless-stopped
+    networks:
+      - aiv_network
+
+# ─── Volumes ─────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+
+# ─── Networks ─────────────────────────────────────────────────────────────────
+networks:
+  aiv_network:
+    driver: bridge
+

@@ -272,7 +272,7 @@ export function AgentCreateTicket() {
             email: a.email,
             user_type: 'agent',
             account_id: null,
-            status: a.status === 'ACTIVE' ? 'active' : 'inactive',
+            status: a.status === 'ACTIVE' ? 'active' : 'disabled',
             phone: a.phone,
             mobile: a.mobile,
             job_title: a.job_title,

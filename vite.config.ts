@@ -213,11 +213,15 @@ export default defineConfig({
     port: 8092,
     proxy: {
       '/auth': {
-        target: 'http://127.0.0.1:8095',
+        target: process.env.BACKEND_URL || 'http://backend:8095',
         changeOrigin: true,
       },
       '/rest': {
-        target: 'http://127.0.0.1:8095',
+        target: process.env.BACKEND_URL || 'http://backend:8095',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: process.env.BACKEND_URL || 'http://backend:8095',
         changeOrigin: true,
       },
     },
@@ -227,11 +231,15 @@ export default defineConfig({
     port: 8092,
     proxy: {
       '/auth': {
-        target: 'http://127.0.0.1:8095',
+        target: process.env.BACKEND_URL || 'http://backend:8095',
         changeOrigin: true,
       },
       '/rest': {
-        target: 'http://127.0.0.1:8095',
+        target: process.env.BACKEND_URL || 'http://backend:8095',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: process.env.BACKEND_URL || 'http://backend:8095',
         changeOrigin: true,
       },
     },
